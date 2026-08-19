@@ -1,0 +1,538 @@
+﻿QUAL-KÄª v2.0: Quantum-Aware Agentic AI SOC Framework
+Complete Architecture, Roadmap & Research Foundation
+Target: IEEE paper-ready architecture + functional prototypeDate: August 2026Extends: QUAL-KÄª v1.0 (QML IDS + PQC Zero Trust)
+
+1. Executive Summary
+QUAL-KÄª v2.0 evolves from a monolithic QML intrusion detection model into a fully autonomous, multi-agent Security Operations Center (SOC) secured by a hybrid PQC + QKD cryptographic backbone. This document defines:
+The 8+ agent architecture with specialized roles mimicking a Tier-1/2/3 SOC team
+The QKD-secured inter-agent communication channel (BB84 simulation)
+The integration bridge between the existing 4-Branch Quantum Ensemble IDS and the agentic decision layer
+A phased implementation roadmap from prototype to paper
+A benchmarking strategy aligned with emerging SOC-agent evaluation frameworks
+[!IMPORTANT]Â What already exists (QUAL-KÄª v1.0):
+âœ… Multi-modal dataset: 19,275 time-windows Ã— 132 features (Network + OS telemetry)
+âœ… 4-Branch Quantum Ensemble Classifier (16 qubits, PennyLane/PyTorch)
+âœ… Supervised Semantic Autoencoders (4 domains â†’ 16 latent features)
+âœ… PQC Authentication Layer design (ML-KEM/Kyber)
+âœ… Hybrid ZTA Architecture (PDP/PEP with AES-256 continuous encryption)
+âœ… MITRE Caldera adversary emulation lab (10 PCs, 32 VMs)
+âœ… Classical baseline benchmarks (XGBoost F1: 0.39 ceiling)
+
+2. The Research Gap: Why an Agentic Layer Is Required
+2.1 Gap in Existing QUAL-KÄª v1.0
+The current framework provides a binary/multiclass verdict â€” "this 1-second time-window is Normal / DoS / Recon / Brute Force / Malware." But a verdict alone is not an operational SOC. Real SOCs require:
+SOC Capability
+QUAL-KÄª v1.0
+QUAL-KÄª v2.0 (Agentic)
+Detection
+âœ… QML Ensemble
+âœ… QML Ensemble â†’ feeds Detection Agent
+Triage & Prioritization
+âŒ None
+âœ… LLM-powered Triage Agent with CVSS scoring
+Correlation
+âŒ Isolated verdicts
+âœ… Threat Intel Agent correlates with MITRE ATT&CK
+Automated Response
+âŒ Manual PEP
+âœ… Response Agent issues firewall rules, token revocations
+Forensic Analysis
+âŒ None
+âœ… Forensics Agent reconstructs kill chains
+Deception
+âŒ None
+âœ… Deception Agent deploys honeypots dynamically
+Vulnerability Scanning
+âŒ None
+âœ… Vuln Agent continuously assesses attack surface
+Compliance Reporting
+âŒ None
+âœ… Compliance Agent generates SOC 2 / ISO 27001 reports
+Inter-Agent Security
+N/A
+âœ… QKD (BB84) secures agent-to-agent messages
+
+2.2 Gap in the Wider Literature (Novel Contribution)
+Existing Work
+What They Do
+What They Miss
+Our Novelty
+Agentic AI SOCs (Torq, Dropzone, 2025-26)
+LLM-based triage, ReAct agents
+No quantum detection layer; classical crypto only
+Quantum detection backbone feeds the agentic layer
+QML-IDS papers (2023-25)
+QML models for anomaly detection
+No operational SOC integration; just a model
+Full SOC orchestration around the QML engine
+QKD + ZTA research (2024-25)
+QKD for network micro-segmentation
+No AI agent coordination; static policy
+QKD secures dynamic multi-agent communication
+ExCyTIn-Bench / SOC-Bench (2025)
+Benchmark AI SOC agents
+No quantum-aware benchmarks
+Quantum-aware SOC benchmark extension
+
+[!TIP]Â The Q1 Paper Pitch (4 Pillars of Novelty):
+Quantum Detection â†’ Agentic Reasoning: First framework where a QML ensemble directly feeds multi-agent LLM triage
+QKD-Secured Agent Communication: BB84-simulated inter-agent channel (no classical agent trust)
+Multi-Modal Telemetry: Custom dataset fusing Network + OS + Agent decision logs
+Quantum-Aware Benchmarking: Extended ExCyTIn-Bench with quantum-specific evaluation metrics
+
+3. Complete System Architecture
+3.1 High-Level Architecture
+
+3.2 Agent Roles & Responsibilities
+Agent
+Role
+Input
+Output
+Tools/APIs
+ðŸŽ¯ Orchestrator
+Supervisor; routes tasks, resolves conflicts, enforces human-in-the-loop for critical actions
+Agent messages, escalation requests
+Task assignments, final verdicts
+Agent messaging bus, approval queue
+ðŸ” Detection Agent
+Receives QML verdicts, adds context (source IP, timestamp, confidence score), creates structured alerts
+QML 5-class output + raw telemetry metadata
+Structured AlertObject (JSON)
+QML inference API, flow metadata DB
+âš¡ Triage Agent
+Prioritizes alerts using LLM reasoning; auto-closes false positives, escalates true positives
+AlertObject stream
+Priority-ranked alert queue with reasoning trace
+LLM (GPT-4/Gemini), CVSS calculator, historical alert DB
+ðŸŒ Threat Intel Agent
+Correlates alerts with MITRE ATT&CK, CVE databases, and external threat feeds
+Alert + IoCs (IPs, hashes, domains)
+ATT&CK technique mapping, campaign attribution
+MITRE ATT&CK API, MISP, VirusTotal, AbuseIPDB
+ðŸ›¡ï¸ Response Agent
+Executes containment and remediation actions (block IP, isolate host, revoke token)
+Approved response plan from Orchestrator
+Firewall rules, DNS sinkhole entries, token revocations
+PEP API, firewall API, Active Directory, ZTA token service
+ðŸ”¬ Forensics Agent
+Reconstructs attack kill chains, timeline analysis, evidence preservation
+Alert history + raw logs
+Kill chain report, IOC extraction, evidence bundle
+Log analysis tools, PCAP parser, timeline reconstruction
+ðŸª¤ Deception Agent
+Dynamically deploys/reconfigures honeypots based on detected attack patterns
+Active threat intelligence
+Honeypot configurations, attacker engagement logs
+Honeypot framework (T-Pot/HoneyDB), network config API
+ðŸ“¡ Vuln Assessment Agent
+Continuous vulnerability scanning, correlates vulns with active threats
+Asset inventory, CVE feeds
+Risk-prioritized vulnerability reports
+OpenVAS/Nessus API, CVE database, asset management
+ðŸ“‹ Compliance Agent
+Generates compliance reports, tracks SLA violations, audit trail maintenance
+All agent decisions + response logs
+SOC 2 Type II reports, ISO 27001 evidence, SLA dashboards
+Report generator, audit log aggregator
+
+3.3 Inter-Agent Communication: QKD-Secured Message Bus
+[!NOTE]Â Why QKD for Agent Communication?Â Traditional multi-agent systems use TLS or mTLS for inter-agent communication. In a Zero Trust SOC, if any agent is compromised (e.g., via prompt injection), the attacker gains access to the entire message bus. QKD provides:
+Information-theoretic security â€” no computational assumption can be broken
+Eavesdropping detection â€” any interception disturbs quantum states (QBER monitoring)
+Forward secrecy â€” compromised keys reveal nothing about past/future communication
+Agent authentication â€” quantum identity verification prevents agent impersonation
+
+4. Technology Stack & Framework Selection
+4.1 Recommended Stack
+Layer
+Technology
+Justification
+Agent Orchestration
+LangGraph (LangChain ecosystem)
+Graph-based state machines for complex SOC workflows; supports conditional branching, human-in-the-loop, and persistent state
+Agent LLM Backend
+Gemini 2.5 Pro / GPT-4o (configurable)
+Reasoning capability for triage and forensic analysis
+Quantum ML
+PennyLane + PyTorch (existing)
+Already implemented; 4-Branch Quantum Ensemble
+QKD Simulation
+SimulaQron / Custom BB84 (Python)
+Lightweight quantum network simulator for BB84 key exchange
+Message Bus
+Redis Streams or RabbitMQ
+Low-latency pub/sub for agent communication
+Encryption Layer
+pqcrypto (Python) + cryptography (AES)
+ML-KEM for auth, AES-256-GCM for stream, OTP for QKD messages
+Threat Intel
+MISP (self-hosted) + pyattck
+MITRE ATT&CK mapping, IoC enrichment
+SIEM Integration
+Wazuh (existing) + Elasticsearch
+Log aggregation, searchable alert index
+Dashboard
+Streamlit or Grafana
+Real-time SOC visualization
+Containerization
+Docker Compose
+Multi-agent deployment
+
+4.2 Why LangGraph (Not CrewAI or AutoGen)
+Framework
+Pros
+Cons
+Fit for QUAL-KÄª
+LangGraph
+Graph-based workflows, state persistence, human-in-the-loop, conditional edges, streaming
+Steeper learning curve
+âœ… Best fit â€” SOC workflows are inherently stateful DAGs
+CrewAI
+Simple role-based agents, easy setup
+Limited state management, no conditional routing
+âŒ Too simple for SOC decision trees
+AutoGen
+Multi-agent conversations
+Conversation-based (not workflow-based), less control
+âŒ SOC needs deterministic routing, not chat
+Google ADK
+Google ecosystem integration
+Newer, less community tooling
+âš ï¸ Worth monitoring
+
+
+5. Phased Implementation Roadmap
+Phase 0: Foundation (Weeks 1-2)
+Goal: Project scaffolding and environment setup
+â˜Create monorepo structure: qual_ki_soc/
+agents/ â€” Individual agent modules
+quantum/ â€” QML ensemble + QKD simulator
+crypto/ â€” PQC + AES + QKD key management
+telemetry/ â€” Data ingestion pipeline
+orchestrator/ â€” LangGraph workflow definitions
+dashboard/ â€” SOC visualization
+benchmarks/ â€” Evaluation framework
+tests/ â€” Unit + integration tests
+â˜Docker Compose setup for all services
+â˜Port existing QML ensemble into quantum/ module with inference API
+â˜Set up Redis Streams message bus
+Phase 1: Core Detection Pipeline (Weeks 3-4)
+Goal: Connect QML Ensemble â†’ Detection Agent â†’ Orchestrator
+â˜Wrap QML Ensemble in a FastAPI inference service
+â˜Build DetectionAgent â€” consumes QML verdicts, enriches with metadata, emits AlertObject
+â˜Build OrchestratorAgent â€” LangGraph supervisor node that receives alerts and routes to specialists
+â˜Implement basic message schema (AlertObject, TaskAssignment, AgentResponse)
+â˜Unit test: QML verdict â†’ Detection Agent â†’ Orchestrator routing
+Phase 2: Triage & Threat Intel Agents (Weeks 5-6)
+Goal: LLM-powered alert triage and ATT&CK correlation
+â˜Build TriageAgent â€” LLM-based priority scoring (CVSS-aligned)
+Input: AlertObject + historical context
+Output: Priority (P1-P4), confidence score, reasoning trace
+Auto-close logic for known false positive patterns
+â˜Build ThreatIntelAgent â€” MITRE ATT&CK technique mapping
+Input: Alert IoCs (IPs, ports, Sysmon Event IDs)
+Output: ATT&CK technique IDs, related campaigns, CVE links
+Integration: pyattck library + MISP threat feed
+â˜LangGraph conditional edges: HIGH priority â†’ fast-track to Response; LOW â†’ auto-close with audit
+Phase 3: Response & Forensics Agents (Weeks 7-8)
+Goal: Automated containment and kill chain reconstruction
+â˜Build ResponseAgent â€” executes containment actions
+Firewall rule injection (iptables / nftables API)
+ZTA token revocation (existing PDP integration)
+Host isolation via Wazuh active response
+Human-in-the-loop gate for destructive actions (network segment isolation, account lockout)
+â˜Build ForensicsAgent â€” attack timeline reconstruction
+Correlates alerts into incident timelines
+Maps to MITRE ATT&CK kill chain phases
+Generates evidence bundles (logs, PCAPs, screenshots)
+â˜Integration test: Full alert â†’ triage â†’ response â†’ forensics pipeline
+Phase 4: QKD Integration (Weeks 9-10)
+Goal: BB84-simulated quantum key distribution for inter-agent communication
+â˜Implement BB84 QKD simulator in Python
+Alice (key sender) + Bob (key receiver) protocol
+Basis reconciliation, privacy amplification
+QBER (Quantum Bit Error Rate) monitoring
+Eavesdropper (Eve) detection simulation
+â˜Implement QKD Key Manager
+Key pool management (pre-generated keys per agent pair)
+Automatic key rotation (configurable interval)
+Key exhaustion handling (fallback to PQC)
+â˜Encrypt all inter-agent messages with QKD-derived OTP/AES keys
+â˜Security validation: Inject simulated Eve â†’ verify QBER spike â†’ agent quarantine
+Phase 5: Deception, Vuln Assessment & Compliance (Weeks 11-12)
+Goal: Complete the SOC agent roster
+â˜Build DeceptionAgent â€” dynamic honeypot orchestration
+Deploy decoy services matching detected attack vectors
+Log attacker interactions for threat intel enrichment
+Integration with T-Pot or custom honeypots
+â˜Build VulnAssessmentAgent â€” continuous attack surface monitoring
+Scheduled scans via OpenVAS/Nessus API
+Correlates vulnerabilities with active threat intelligence
+Risk-prioritized remediation recommendations
+â˜Build ComplianceAgent â€” automated audit trail and reporting
+SOC 2 Type II evidence collection
+ISO 27001 control mapping
+SLA tracking and violation alerts
+Generates human-readable compliance reports
+Phase 6: Benchmarking & Evaluation (Weeks 13-14)
+Goal: Rigorous evaluation aligned with academic standards
+â˜Implement QUAL-KÄª Benchmark Suite (extending ExCyTIn-Bench)
+Detection Accuracy: Precision, Recall, F1, AUC-ROC of QML ensemble
+Triage Quality: Agreement with expert labels, false positive suppression rate
+Response Latency: MTTD (Mean Time to Detect), MTTR (Mean Time to Respond)
+Kill Chain Coverage: % of ATT&CK techniques correctly identified
+QKD Security: QBER under normal vs. adversarial conditions
+Agent Coordination: Task completion rate, escalation accuracy
+Quantum Advantage Metrics: Parameter efficiency ratio (QML vs classical MLP at matched scale)
+â˜Run red team scenarios using MITRE Caldera (existing lab)
+Scenario 1: Multi-stage APT (Recon â†’ Exploitation â†’ Lateral Movement â†’ Exfiltration)
+Scenario 2: Insider threat (Credential abuse â†’ Privilege escalation â†’ Data theft)
+Scenario 3: DDoS + Distraction attack (Volumetric DDoS covering lateral movement)
+â˜Ablation studies:
+With vs without QML (use classical XGBoost detection instead)
+With vs without QKD (use TLS for agent communication instead)
+With vs without agentic layer (monolithic detector vs multi-agent SOC)
+Phase 7: Paper Drafting & Publication (Weeks 15-16)
+Goal: IEEE Transactions-ready manuscript
+â˜Structure: Abstract â†’ Introduction â†’ Related Work â†’ Architecture â†’ Implementation â†’ Evaluation â†’ Discussion â†’ Conclusion
+â˜Key figures:
+System architecture diagram (Section 3.1 of this document)
+QKD message flow (Section 3.3)
+Benchmark comparison tables
+Ablation study results
+QML ensemble circuit diagrams (existing)
+â˜Target journals:
+Primary: IEEE Transactions on Information Forensics and Security (IF: ~7.2)
+Secondary: Computers & Security (Elsevier, IF: ~5.1)
+Conference: IEEE S&P Workshop on Quantum Security
+
+6. Benchmarking Framework: QUAL-KÄª-Bench
+6.1 Benchmark Dimensions
+Dimension
+Metric
+Target
+Measurement Method
+Detection
+Macro F1-Score (5-class)
+> 0.40 (QML) vs 0.39 (XGBoost ceiling)
+Stratified 5-Fold CV on 19,275 samples
+Detection
+Parameter Efficiency Ratio
+QML params < 500 vs MLP params > 1000 for same F1
+Parameter count comparison
+Triage
+False Positive Suppression
+> 60% of low-priority alerts auto-closed correctly
+Expert-labeled validation set
+Triage
+Reasoning Fidelity
+LLM triage traces match human analyst reasoning > 80%
+Human evaluation (Cohen's Kappa)
+Response
+MTTR (Mean Time to Respond)
+< 30 seconds for automated containment
+Timestamp delta: alert â†’ response execution
+Forensics
+Kill Chain Completeness
+> 70% ATT&CK techniques identified per scenario
+Scenario ground truth comparison
+QKD
+QBER (Normal)
+< 5%
+BB84 simulation measurement
+QKD
+QBER (Under Attack)
+> 25% (Eve detected)
+Eavesdropper injection test
+QKD
+Key Generation Rate
+> 100 keys/sec (simulated)
+Throughput measurement
+System
+End-to-End Latency
+< 5 seconds (detection â†’ containment)
+Full pipeline trace
+System
+Agent Coordination Score
+> 90% task completion without human intervention
+Automated scenario runner
+
+6.2 Comparison with Existing Benchmarks
+Benchmark
+Focus
+Quantum-Aware?
+Multi-Agent?
+Our Extension
+ExCyTIn-Bench
+LLM reasoning for cyber investigations
+âŒ
+âŒ
+Add QML detection feed as evidence source
+SOC-Bench
+Multi-agent SOC evaluation
+âŒ
+âœ…
+Add QKD security + quantum detection metrics
+Simbian Leaderboard
+LLM accuracy on SOC tasks
+âŒ
+âŒ
+Add quantum parameter efficiency comparison
+QUAL-KÄª-Bench (Ours)
+End-to-end quantum SOC
+âœ…
+âœ…
+Novel: First quantum-aware SOC benchmark
+
+
+7. Security Architecture: Threat Model for the Agentic Layer
+7.1 Threats to Multi-Agent AI SOCs
+Threat
+Description
+QUAL-KÄª v2.0 Mitigation
+Prompt Injection
+Attacker crafts log entries that manipulate LLM triage reasoning
+Input sanitization layer + confidence gating (reject if LLM confidence < threshold)
+Agent Impersonation
+Rogue agent joins the message bus and injects false verdicts
+QKD authentication â€” agents must prove possession of quantum-derived keys
+Tool Poisoning
+Compromised API returns false threat intel or vulnerability data
+Multi-source validation (cross-reference â‰¥2 independent sources before acting)
+Cascading Failure
+One agent's error propagates through the orchestrator
+Circuit breaker pattern + Orchestrator sanity checks on all agent outputs
+Model Extraction
+Adversary probes QML ensemble to extract decision boundaries
+Rate limiting on inference API + differential privacy on model outputs
+QKD Channel Attack
+Physical layer attack on QKD channel (blinding, Trojan horse)
+QBER threshold monitoring + automatic channel shutdown on anomaly
+
+7.2 OWASP Agentic AI Security Alignment
+The framework implements controls aligned with the OWASP Top 10 for Agentic AI (2025):
+A01: Unrestricted Agency â†’ All Response Agent actions require Orchestrator approval; destructive actions require human approval
+A02: Prompt Injection â†’ Structured input schemas (JSON AlertObjects) prevent free-text injection
+A03: Insufficient Sandboxing â†’ Each agent runs in isolated Docker container with minimal permissions
+A04: Excessive Trust in Tools â†’ Multi-source validation for all external API calls
+A05: Insufficient Logging â†’ All agent decisions logged with full reasoning trace (audit trail)
+
+8. Key Academic References & Resources
+8.1 Agentic AI SOC Architecture
+Resource
+Type
+Relevance
+ExCyTIn-Bench (2025)
+Benchmark
+LLM agent evaluation for cybersecurity investigations; SQL-in-the-loop methodology
+MAESTRO Framework (OWASP, 2025)
+Security Framework
+Multi-Agent Security Testing, Risk evaluation, and Orchestration
+"Agentic AI in the SOC" (Cloud Security Alliance, 2026)
+Industry Report
+45-61% MTTR reduction with agentic SOCs; governance models
+Torq / Dropzone / StellarCyber architectures
+Industry
+Real-world agentic SOC implementations; agent role definitions
+
+8.2 Quantum Machine Learning for IDS
+Paper
+Year
+Citations
+Key Contribution
+QML-IDS: Quantum ML Intrusion Detection System
+2024
+44
+QSVM + QNN baseline for IDS
+Network Anomaly Detection Using QNN on Noisy Quantum Computers
+2024
+42
+NISQ-aware VQC training
+Intrusion Detection with Optimized QNN and ECC
+2023
+41
+QNN + ECC (our paper exposes ECC vulnerability)
+QML for Advanced Threat Detection in Cybersecurity
+2024
+29
+Broad QML threat hunting architecture
+Variational Quantum Convolutional Neural Network for IDS
+2024
+25
+VQCNN (our paper proves barren plateau failure)
+PÃ©rez-Salinas et al. â€” Data Re-uploading
+2020
+300+
+Universal function approximation with single-qubit re-uploading
+
+8.3 Quantum Key Distribution & Zero Trust
+Resource
+Type
+Relevance
+NIST SP 800-207: Zero Trust Architecture
+Standard
+Formal PDP/PEP definitions; our ZTA compliance basis
+BB84 Protocol (Bennett & Brassard, 1984)
+Foundational
+QKD protocol we simulate for inter-agent keys
+FHE-based QKD Relay Architectures (2024-25)
+Research
+Extends QKD range via homomorphic encryption relays
+"QKD in Enterprise Networks" (ETSI, 2024)
+Standard
+QKD deployment guidelines for commercial networks
+
+8.4 Multi-Agent AI Security
+Resource
+Type
+Relevance
+OWASP Top 10 for Agentic AI (2025)
+Security Standard
+Threat model for multi-agent systems
+LangGraph Documentation
+Framework
+State machine orchestration for agent workflows
+"Securing AI Agents" (MITRE ATLAS, 2025)
+Threat Framework
+Adversarial ML attacks on autonomous agents
+
+
+9. Directory Structure (Proposed)
+qual_ki_soc/â”œâ”€â”€ docker-compose.ymlâ”œâ”€â”€ README.mdâ”œâ”€â”€ pyproject.tomlâ”‚â”œâ”€â”€ agents/â”‚   â”œâ”€â”€ __init__.pyâ”‚   â”œâ”€â”€ base_agent.py          # Abstract base class for all agentsâ”‚   â”œâ”€â”€ detection_agent.py     # QML verdict consumer + alert enrichmentâ”‚   â”œâ”€â”€ triage_agent.py        # LLM-powered priority scoringâ”‚   â”œâ”€â”€ threat_intel_agent.py  # MITRE ATT&CK + MISP integrationâ”‚   â”œâ”€â”€ response_agent.py      # Automated containment actionsâ”‚   â”œâ”€â”€ forensics_agent.py     # Kill chain reconstructionâ”‚   â”œâ”€â”€ deception_agent.py     # Dynamic honeypot orchestrationâ”‚   â”œâ”€â”€ vuln_agent.py          # Continuous vulnerability scanningâ”‚   â””â”€â”€ compliance_agent.py    # SOC 2 / ISO 27001 reportingâ”‚â”œâ”€â”€ orchestrator/â”‚   â”œâ”€â”€ __init__.pyâ”‚   â”œâ”€â”€ graph.py               # LangGraph workflow DAG definitionâ”‚   â”œâ”€â”€ state.py               # Shared state schemaâ”‚   â”œâ”€â”€ nodes.py               # Agent nodes for the graphâ”‚   â””â”€â”€ edges.py               # Conditional routing logicâ”‚â”œâ”€â”€ quantum/â”‚   â”œâ”€â”€ __init__.pyâ”‚   â”œâ”€â”€ ensemble.py            # 4-Branch Quantum Ensemble (existing)â”‚   â”œâ”€â”€ inference_api.py       # FastAPI wrapper for QML modelâ”‚   â”œâ”€â”€ autoencoders.py        # Supervised Semantic Autoencoders (existing)â”‚   â””â”€â”€ circuits.py            # PennyLane circuit definitionsâ”‚â”œâ”€â”€ crypto/â”‚   â”œâ”€â”€ __init__.pyâ”‚   â”œâ”€â”€ pqc_auth.py            # ML-KEM (Kyber) authenticationâ”‚   â”œâ”€â”€ aes_stream.py          # AES-256-GCM continuous encryptionâ”‚   â”œâ”€â”€ qkd_bb84.py            # BB84 QKD simulatorâ”‚   â”œâ”€â”€ key_manager.py         # QKD key pool + rotation managerâ”‚   â””â”€â”€ message_crypto.py      # Agent message encrypt/decryptâ”‚â”œâ”€â”€ telemetry/â”‚   â”œâ”€â”€ __init__.pyâ”‚   â”œâ”€â”€ ingestion.py           # Real-time telemetry ingestionâ”‚   â”œâ”€â”€ time_window.py         # 1-second aggregation (existing logic)â”‚   â”œâ”€â”€ feature_engineering.py # One-hot expansion, scalingâ”‚   â””â”€â”€ schemas.py             # AlertObject, TaskAssignment, etc.â”‚â”œâ”€â”€ dashboard/â”‚   â”œâ”€â”€ app.py                 # Streamlit SOC dashboardâ”‚   â”œâ”€â”€ components/â”‚   â””â”€â”€ static/â”‚â”œâ”€â”€ benchmarks/â”‚   â”œâ”€â”€ __init__.pyâ”‚   â”œâ”€â”€ quali_bench.py         # QUAL-KÄª-Bench runnerâ”‚   â”œâ”€â”€ scenarios/             # MITRE Caldera attack scenariosâ”‚   â”œâ”€â”€ metrics.py             # Metric calculatorsâ”‚   â””â”€â”€ baselines/             # Classical comparison baselinesâ”‚â”œâ”€â”€ config/â”‚   â”œâ”€â”€ agents.yaml            # Agent configurationsâ”‚   â”œâ”€â”€ qkd.yaml               # QKD parameters (key pool size, rotation interval)â”‚   â””â”€â”€ soc.yaml               # SOC policies (escalation thresholds, SLAs)â”‚â””â”€â”€ tests/    â”œâ”€â”€ test_agents/    â”œâ”€â”€ test_quantum/    â”œâ”€â”€ test_crypto/    â””â”€â”€ test_integration/
+
+10. Risk Register & Mitigations
+Risk
+Probability
+Impact
+Mitigation
+QML F1 doesn't beat XGBoost ceiling (0.39)
+Medium
+High
+Frame as parameter efficiency advantage (453 vs thousands of params); continue hyperparameter tuning
+LLM triage hallucinations
+High
+Medium
+Structured output schemas + confidence gating + human-in-the-loop for P1 alerts
+QKD simulation questioned for academic rigor
+Medium
+High
+Use established SimulaQron framework; cite BB84 information-theoretic proofs
+Integration complexity delays
+High
+Medium
+Docker Compose microservices; independent agent development; CI/CD pipeline
+Scope creep (8+ agents is ambitious)
+High
+Medium
+Prioritize core 4 agents (Detection, Triage, Response, Orchestrator); others can be stubs for paper
+
+
+11. Summary: What Makes QUAL-KÄª v2.0 Unprecedented
+
+[!CAUTION]Â Critical Path Dependencies:
+QML Ensemble must achieve stable multiclass F1 before Detection Agent can be validated
+LangGraph Orchestrator must be functional before any inter-agent workflow testing
+BB84 QKD simulator must pass eavesdropper detection tests before claiming quantum-secure agent communication
+
+Document Version: 1.0Author: QUAL-KÄª Research TeamNext Review: Upon completion of Phase 1
+
