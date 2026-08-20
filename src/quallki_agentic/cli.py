@@ -31,6 +31,7 @@ def main() -> None:
     print("\n=== TRIAGE RESULT ===")
     print(f"Scenario: {args.scenario} - {scenario['title']}")
     print(f"Label: {label}")
+    print(f"QML backend: {run_data.get('qml_backend', 'unknown')}")
     print(f"Confidence: {confidence:.2f}")
 
     print("\nSimulated Logs:")
@@ -64,11 +65,18 @@ def main() -> None:
             print(f"{index}. {action}")
 
     checklist = result.get("compliance_checklist", [])
+    compliance_assessment = result.get("compliance_assessment", {})
     if isinstance(checklist, list) and checklist:
-        print("\nHealthcare Compliance Checklist:")
+        print("\nCompliance Evidence Mapping:")
+        if isinstance(compliance_assessment, dict):
+            print(f"Assessment metrics: {compliance_assessment}")
         for item in checklist:
             if isinstance(item, dict):
-                print(f"- {item.get('id', '?')} [{item.get('status', 'pending')}] {item.get('framework', '')} | {item.get('control', '')}")
+                print(
+                    f"- {item.get('id', '?')} [{item.get('status', 'not_evidenced')}] "
+                    f"{item.get('framework', '')} | {item.get('control', '')} | "
+                    f"Owner: {item.get('owner', 'unassigned')}"
+                )
 
     print("\nSOC Summary:")
     print(result.get("final_summary", "No summary generated."))

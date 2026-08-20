@@ -10,6 +10,8 @@ class OrchestratorState(TypedDict, total=False):
     asset_type: str
     contains_phi: bool
     clinical_impact: str
+    compliance_context: dict
+    compliance_evidence: dict
     alert_id: str
     event_time: str
     qml_label: str
@@ -24,4 +26,5 @@ class OrchestratorState(TypedDict, total=False):
     forensics_summary: str
     compliance_note: str
     compliance_checklist: list[dict]
+    compliance_assessment: dict
     final_summary: str

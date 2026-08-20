@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from quallki_agentic.agents.base_agent import BaseAgent
-from quallki_agentic.healthcare import summarize_checklist
+from quallki_agentic.healthcare.compliance import assess_compliance
 
 
 class ComplianceAgent(BaseAgent):
     name = "compliance"
 
     def run(self, payload: dict[str, object]) -> dict[str, object]:
-        checklist, summary = summarize_checklist(payload)
+        checklist, summary, assessment = assess_compliance(payload)
         return {
             "compliance_note": summary,
             "compliance_checklist": checklist,
+            "compliance_assessment": assessment,
         }

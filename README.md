@@ -34,9 +34,17 @@ Triage Agent
 Threat Intel -> Response -> Forensics -> Compliance -> Final summary
 ```
 
-The current detection model is intentionally a QML stub. It returns only an
-attack label; it does not return confidence. Confidence is calculated by the
-detection pipeline from observable signals:
+The current detection model uses the supplied learned autoencoder checkpoint
+at `best_qml_autoencoder_6q.pt` followed by the six-qubit VQC checkpoint at
+`best_qml_vqc_6q.pt`:
+
+```text
+99 supplied features -> Linear(99, 64) -> ReLU -> Linear(64, 6)
+				  -> AngleEmbedding -> 6-qubit VQC -> Linear(6, 10)
+```
+
+The VQC returns only an attack label; it does not return confidence. Confidence
+is calculated by the detection pipeline from observable signals:
 
 - QML label strength
 - Extracted IOCs
@@ -44,7 +52,10 @@ detection pipeline from observable signals:
 - CWSS-like severity
 - Optional telemetry signal strength
 
-There is no classical model fallback in the active detection path.
+Both checkpoints are loaded through `qml_model.py` using Torch and PennyLane.
+There is no classical model fallback in the active detection path. If the QML
+runtime or checkpoint is unavailable, the system reports `heuristic_stub` as
+the backend rather than hiding the fallback.
 
 ## Demo Scenarios
 
@@ -150,7 +161,9 @@ calculates the CWSS-like score, and returns an enriched `alert_object`.
 
 Supporting modules:
 
-- `qml_stub.py`: label-only QML placeholder
+- `qml_model.py`: learned autoencoder and VQC checkpoint adapter
+- `qml_stub.py`: QML entry point and explicit unavailable-model fallback
+- `feature_schema.py`: canonical feature names and vector construction
 - `log_analyzer.py`: log evidence, attack vector, IOC, CWE, and asset analysis
 - `scoring.py`: CWSS-like scoring and composite confidence aggregation
 
@@ -185,14 +198,82 @@ context.
 
 ### Compliance Agent
 
-Generates checklist evidence across the healthcare-oriented compliance scope:
+Generates an evidence mapping across the healthcare-oriented compliance scope.
+It does not claim that the application, hospital, or organization is compliant.
+Each row includes an authoritative source URL, control owner, required evidence,
+and an evidence posture:
+
+- `observed`: this incident run produced limited event-level context related to the control
+- `not_evidenced`: the required authoritative evidence was not provided
+
+The system deliberately has no `compliant` or `done` status. Production evidence
+must come from approved policies, IAM/SIEM/EDR records, tickets, change systems,
+privacy/legal decisions, internal audits, and independent assessors where required.
+
+The SIEM assessor considers these factors:
+
+- Applicability: organization, jurisdiction, sector, service, and scope context
+- Evidence coverage: every required evidence item for the control
+- Provenance: source system and collection time
+- Integrity: hash or equivalent tamper-evidence reference
+- Accountability: owner, approver, ticket, and execution record
+- Freshness: event time, review time, and retention period
+- Auditability: population, sampling method, immutable references, and chain of custody
+- Incident impact: PHI, affected assets, service disruption, severity, and cross-border impact
+- Reporting clocks: HIPAA, GDPR, or NIS2 notification decision and timestamps
+
+Callers can provide real SIEM/GRC evidence through `compliance_context` and
+`compliance_evidence`:
+
+```python
+{
+	"compliance_context": {
+		"hipaa_applicable": True,
+		"gdpr_applicable": False,
+		"iso_scope": True,
+		"soc2_scope": True,
+		"nis2_applicable": False,
+	},
+	"compliance_evidence": {
+		"HIPAA-164.308(a)(6)": {
+			"incident_ticket": "INC-2026-0001",
+			"timeline": "siem://cases/INC-2026-0001/timeline",
+			"containment_record": "edr://actions/abc123",
+			"outcome_record": "itsm://changes/CHG-1001",
+			"ticket_id": "INC-2026-0001",
+			"approver": "soc-manager@example.org",
+			"execution_time": "2026-08-20T12:00:00Z",
+			"source_system": "siem",
+			"integrity_hash": "sha256:...",
+		},
+	},
+}
+```
+
+The assessor returns `not_applicable`, `not_evidenced`, `partial`, or
+`evidence_complete`. `evidence_complete` means the submitted evidence fields
+are complete for review; it does not mean the organization is compliant.
+
+The mapped sources are:
 
 - HIPAA Security Rule
+- HHS HIPAA Breach Notification Rule
+- NIST SP 800-66 Rev. 2
+- NIST Cybersecurity Framework 2.0
 - GDPR Articles 32 and 33
 - ISO/IEC 27001:2022
-- SOC 2 CC7
-- NIS2 readiness
-- NIST CSF and NIST SP 800-66
+- AICPA SOC 2 Trust Services Criteria
+- EU NIS2 Directive
+
+The complete control catalog, official links, evidence schema, and assessment
+factors are documented in [docs/COMPLIANCE_CHECKLIST.md](docs/COMPLIANCE_CHECKLIST.md).
+
+These frameworks are not universally applicable to every healthcare product.
+HIPAA depends on covered-entity/business-associate status; GDPR depends on
+jurisdiction and processing roles; NIS2 depends on entity and sector scope; ISO
+27001 and SOC 2 are assurance programs with defined scope and audit periods.
+Legal counsel, privacy officers, security officers, control owners, and auditors
+must determine applicability and final compliance status.
 
 ## Project Structure
 
@@ -202,7 +283,9 @@ src/
 	quallki_agentic/
 		cli.py                       Command-line runner
 		config.py                    Environment-backed settings
-		qml_stub.py                  Label-only QML placeholder
+		qml_model.py                 Autoencoder and VQC checkpoint adapter
+		qml_stub.py                  QML entry point and fallback
+		feature_schema.py            99-feature schema and vector construction
 		log_analyzer.py              Log and IOC analysis
 		scoring.py                   CWSS-like and confidence scoring
 		healthcare/
@@ -288,6 +371,8 @@ include:
 | `REDIS_URL` | Redis connection URL | `redis://localhost:6379/0` |
 | `REDIS_STREAM_NAME` | Redis stream name | `qualki.events` |
 | `KNOWLEDGE_DIR` | Local playbook directory | `knowledge` |
+| `QML_MODEL_PATH` | Supplied QML checkpoint path | `best_qml_vqc_6q.pt` |
+| `QML_AUTOENCODER_PATH` | 99-to-6 autoencoder checkpoint path | `best_qml_autoencoder_6q.pt` |
 | `LOCAL_CLASSIFIER_MODEL_PATH` | Legacy classifier asset location | `models/classifier` |
 | `USE_OPENAI` | Enable optional response drafting | `false` |
 | `OPENAI_MODEL` | OpenAI response model | `gpt-4o-mini` |
@@ -334,8 +419,10 @@ Before connecting real telemetry or automated response integrations, add:
 
 ## Current Limitations And Next Steps
 
-- The QML model is a label-only stub and should be replaced by a controlled
-	inference service when the QML artifact is ready.
+- The supplied autoencoder performs the 99-to-6 reduction. Its original
+	training-time feature scaling metadata was not included, so reproduce that
+	scaler for production accuracy. A caller can still provide a preprocessed
+	six-value `qml_input` directly.
 - Log analysis uses deterministic heuristics, not a production parser or SIEM
 	query engine.
 - CWSS-like scoring is an explainable demo heuristic, not an official CWSS

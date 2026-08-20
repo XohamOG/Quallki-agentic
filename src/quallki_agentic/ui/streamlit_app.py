@@ -31,12 +31,14 @@ scenario = run_data["scenario"]
 triage = result.get("triage_result", {})
 response_actions = result.get("response_actions", [])
 checklist = result.get("compliance_checklist", [])
+compliance_assessment = result.get("compliance_assessment", {})
 
 metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
 metric_col1.metric("Label", str(run_data["label"]))
 metric_col2.metric("Confidence", f"{float(run_data['confidence']):.2f}")
 metric_col3.metric("Priority", str(triage.get("priority", "P4")) if isinstance(triage, dict) else "P4")
 metric_col4.metric("Scenario", run_data["scenario_key"])
+st.caption(f"Inference backend: {run_data.get('qml_backend', 'unknown')}")
 
 tab_overview, tab_workflow, tab_triage, tab_response, tab_compliance, tab_summary = st.tabs(
     [
@@ -113,7 +115,13 @@ with tab_response:
         st.info("No containment actions generated")
 
 with tab_compliance:
-    st.subheader("SOC Compliance Checklist")
+    st.subheader("Compliance Evidence Mapping")
+    st.warning(
+        "This is a control-to-evidence mapping, not a compliance certification. "
+        "Open each source and have the named control owner validate the required evidence."
+    )
+    if isinstance(compliance_assessment, dict):
+        st.write(compliance_assessment)
     if isinstance(checklist, list) and checklist:
         st.dataframe(checklist, width="stretch")
     else:

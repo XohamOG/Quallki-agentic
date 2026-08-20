@@ -21,6 +21,8 @@ class Settings:
     redis_stream_name: str = "qualki.events"
     knowledge_dir: str = "knowledge"
     local_classifier_model_path: str = "models/classifier"
+    qml_model_path: str = "best_qml_vqc_6q.pt"
+    qml_autoencoder_path: str = "best_qml_autoencoder_6q.pt"
     model_label_list: str = "BaseLine,Alice2,DevEva,Discov,Hulk,Nmap,NosyN,Ransac,SlowLoris,SuperSpy"
 
     @classmethod
@@ -47,6 +49,10 @@ class Settings:
             knowledge_dir=os.getenv("KNOWLEDGE_DIR", "knowledge"),
             local_classifier_model_path=os.getenv(
                 "LOCAL_CLASSIFIER_MODEL_PATH", "models/classifier"
+            ),
+            qml_model_path=os.getenv("QML_MODEL_PATH", "best_qml_vqc_6q.pt"),
+            qml_autoencoder_path=os.getenv(
+                "QML_AUTOENCODER_PATH", "best_qml_autoencoder_6q.pt"
             ),
             model_label_list=os.getenv(
                 "MODEL_LABEL_LIST",
