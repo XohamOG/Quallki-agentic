@@ -1,141 +1,354 @@
-# Quallki Agentic (QUAL-KI v2 SOC Starter)
+# QUAL-KI Agentic SOC
 
-This repository now includes a roadmap-aligned LangGraph SOC architecture scaffold for QUAL-KI v2.0.
+QUAL-KI is a healthcare-focused agentic security operations center (SOC)
+prototype. It simulates an attack, turns the simulated telemetry and logs into
+a structured alert, evaluates risk, and routes the incident through specialist
+agents for threat intelligence, response, forensics, and compliance evidence.
 
-Current workflow (implemented):
+The repository is currently a deterministic, local demonstration. It does not
+send packets, execute attacks, contact hospital systems, or make containment
+changes to real infrastructure.
 
-1. Ingest and normalize alert text.
-2. Simulate QML verdict bridge (label + confidence).
-3. Detection Agent enriches alert into AlertObject.
-4. Triage Agent assigns priority and route.
-5. Threat Intel Agent maps basic ATT&CK context.
-6. Response, Forensics, and Compliance agents finalize actions and summary.
+## What Is Implemented
 
-## Prerequisites
+The main workflow is built with LangGraph:
 
-- Python 3.11+
+```text
+Selected attack scenario
+				|
+Synthetic telemetry and logs
+				|
+Detection Agent
+	QML label stub
+	Log and IOC analysis
+	Likely CWE extraction
+	CWSS-like score
+	Composite confidence
+				|
+Triage Agent
+	P0 / P1 / P2 priority
+	Route selection
+	Impact and affected assets
+	Recommended fixes
+				|
+Threat Intel -> Response -> Forensics -> Compliance -> Final summary
+```
 
-## Setup
+The current detection model is intentionally a QML stub. It returns only an
+attack label; it does not return confidence. Confidence is calculated by the
+detection pipeline from observable signals:
 
-1. Create and activate a virtual environment.
+- QML label strength
+- Extracted IOCs
+- Log evidence
+- CWSS-like severity
+- Optional telemetry signal strength
+
+There is no classical model fallback in the active detection path.
+
+## Demo Scenarios
+
+The healthcare simulator currently provides three selectable attacks:
+
+| Scenario | Simulated behavior | Typical vector | Typical route |
+| --- | --- | --- | --- |
+| `ehr_ransomware` | EHR encryption, SMB movement, PowerShell activity | Endpoint | P1 response |
+| `radiology_recon` | PACS/DICOM scanning and enumeration | Network | P2 investigation |
+| `infusion_pump_access` | Repeated failed logins and token misuse | Identity | P1 response |
+
+Each scenario contains synthetic timestamped log lines, a source IP, an asset
+type, clinical impact, and PHI context. The scenario is only input data for the
+pipeline; it is not an offensive attack implementation.
+
+## Requirements
+
+- Python 3.11 or newer
+- Windows PowerShell, macOS/Linux shell, or another Python-capable environment
+- Internet access during dependency installation
+
+External Redis and LLM API keys are not required for the local demo.
+
+## Installation
+
+From the repository root:
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
 ```
 
-2. Install dependencies.
+If editable installation is not desired:
 
 ```powershell
-pip install -e .
+python -m pip install -r requirements.txt
 ```
 
-Alternative install path:
+Copy the environment template when configuration is needed:
 
 ```powershell
-pip install -r requirements.txt
+Copy-Item .env.example .env
 ```
 
-3. Copy `.env.example` to `.env` and set API keys.
+The demo uses environment defaults, so filling in API keys is optional.
 
-## Quick start
+## Run The CLI Demo
 
-Run the healthcare SOC demo graph:
+Set the source directory on `PYTHONPATH`, then select one scenario:
 
-```bash
-python -m app --scenario ehr_ransomware
+```powershell
+$env:PYTHONPATH = "src"
+.\.venv\Scripts\python.exe -m quallki_agentic.cli --scenario ehr_ransomware
 ```
 
-Try another hospital scenario:
+Other choices:
 
-```bash
-python -m app --scenario radiology_recon
+```powershell
+.\.venv\Scripts\python.exe -m quallki_agentic.cli --scenario radiology_recon
+.\.venv\Scripts\python.exe -m quallki_agentic.cli --scenario infusion_pump_access
 ```
 
-Available demo scenarios:
+The CLI prints:
 
-- `ehr_ransomware`
-- `radiology_recon`
-- `infusion_pump_access`
+- Selected scenario and QML label
+- Composite confidence
+- Synthetic logs
+- Attack vector and evidence
+- Extracted IOCs and likely CWEs
+- CWSS-like score
+- Triage priority and reasoning
+- Containment actions
+- Healthcare compliance checklist
+- Final SOC summary
 
-## Compliance Scope (Demo)
+## Run The Streamlit Dashboard
 
-The compliance tab/checklist now maps SOC operations to:
+```powershell
+$env:PYTHONPATH = "src"
+.\.venv\Scripts\streamlit.exe run src/quallki_agentic/ui/streamlit_app.py
+```
+
+Open the local URL shown by Streamlit. Select an attack in the sidebar and
+press **Run Agentic SOC**.
+
+Dashboard tabs include:
+
+- **Overview**: scenario metadata, synthetic logs, and detection evidence
+- **Agentic Workflow**: workflow stages
+- **Triage**: priority, confidence, reasoning, impact, and fixes
+- **Containment**: response actions generated by the Response Agent
+- **Compliance**: healthcare control checklist
+- **SOC Summary**: final incident summary and ATT&CK context
+
+## Agent Responsibilities
+
+### Detection Agent
+
+Implemented in `src/quallki_agentic/agents/detection_agent.py`. It calls the
+QML stub, analyzes message/log content, extracts IOCs, estimates likely CWEs,
+calculates the CWSS-like score, and returns an enriched `alert_object`.
+
+Supporting modules:
+
+- `qml_stub.py`: label-only QML placeholder
+- `log_analyzer.py`: log evidence, attack vector, IOC, CWE, and asset analysis
+- `scoring.py`: CWSS-like scoring and composite confidence aggregation
+
+### Triage Agent
+
+Implemented in `src/quallki_agentic/agents/triage_agent.py`. It combines
+composite confidence, CWSS-like score, attack vector, and clinical impact to
+produce:
+
+- Priority: `P0`, `P1`, or `P2`
+- Route: response or investigation
+- Reasoning
+- Affected assets
+- Clinical impact
+- Recommended remediation steps
+
+### Threat Intel Agent
+
+Maps extracted IPs to basic ATT&CK network discovery context and converts CVE
+tokens into NVD links.
+
+### Response Agent
+
+Generates proposed containment actions such as source blocking, token
+revocation, endpoint isolation, clinical operations notification, and PHI
+impact assessment. These are recommendations only in the demo.
+
+### Forensics Agent
+
+Produces a timeline-oriented incident summary using the alert, IOC, and triage
+context.
+
+### Compliance Agent
+
+Generates checklist evidence across the healthcare-oriented compliance scope:
 
 - HIPAA Security Rule
-- GDPR (Article 32 and 33)
+- GDPR Articles 32 and 33
 - ISO/IEC 27001:2022
-- SOC 2 (CC7)
-- NIS2 reporting readiness
-- NIST CSF / NIST SP 800-66
+- SOC 2 CC7
+- NIS2 readiness
+- NIST CSF and NIST SP 800-66
 
-## Runtime Configuration
+## Project Structure
 
-Set in `.env`:
-
-- `LLM_PROVIDER=gemini`
-- `GEMINI_API_KEY=...`
-- `GEMINI_MODEL=gemini-2.5-pro`
-- `DEMO_MODE=true`
-- `DOMAIN_PROFILE=healthcare`
-- `ENABLE_EVENT_BUS=false`
-- `MESSAGE_BUS_BACKEND=inmemory`
-- `REDIS_URL=redis://localhost:6379/0`
-- `REDIS_STREAM_NAME=qualki.events`
-- `CLASSICAL_MODEL_PATH=best_regularized_model.joblib`
-
-For this demo mode, no external Redis/message broker is required.
-
-## Current Detection Backend
-
-Until QML artifacts are ready, the system uses your attached classical model file:
-
-- `best_regularized_model.joblib`
-
-The detection bridge auto-loads this model and uses it for inference fallback in the pipeline.
-
-## Architecture
-
-- `src/quallki_agentic/config.py` holds environment-driven runtime settings.
-- `src/quallki_agentic/agents/` contains SOC role modules (detection, triage, threat intel, response, forensics, deception, vuln, compliance).
-- `src/quallki_agentic/orchestrator/` contains shared schemas, state, routing edges, and LangGraph workflow.
-- `src/quallki_agentic/quantum/` contains QML integration bridge stubs.
-- `src/quallki_agentic/crypto/` contains PQC/QKD message security scaffolding.
-- `src/quallki_agentic/telemetry/` contains ingestion and time-window utilities.
-
-## Where to add your assets
-
-- Put your local classification model artifacts under `models/classifier` (or set `LOCAL_CLASSIFIER_MODEL_PATH`).
-- Put SOC runbooks/playbooks in markdown files under `knowledge/`.
-- Set `USE_OPENAI=true` and keys in `.env` to enable LLM-generated response drafting.
-
-## Roadmap Status
-
-- Phase 0 scaffolding: in progress (module structure created).
-- Phase 1 core pipeline: implemented in runnable form.
-- Phase 2 triage + threat intel baseline: implemented with Gemini-capable triage and heuristic fallback.
-- Phase 3+ modules (response hardening, forensics depth, QKD production simulation, deception/vuln/compliance integrations): scaffolded and ready for integration.
-
-## Next Build Targets
-
-1. Replace feature stub in model inference with real feature vectorization from your cleaned dataset pipeline.
-2. Add Redis consumer workers so specialist agents can run in separate processes.
-3. Add FastAPI inference service wrapping current classical model and later QML endpoint swap.
-4. Extend the Streamlit UI with analyst decision logging and downloadable compliance evidence bundle.
-
-## UI Demo
-
-Run the demo web app:
-
-```bash
-streamlit run src/quallki_agentic/ui/streamlit_app.py
+```text
+src/
+	app.py                         CLI compatibility entry point
+	quallki_agentic/
+		cli.py                       Command-line runner
+		config.py                    Environment-backed settings
+		qml_stub.py                  Label-only QML placeholder
+		log_analyzer.py              Log and IOC analysis
+		scoring.py                   CWSS-like and confidence scoring
+		healthcare/
+			demo_cases.py              Selectable attack scenarios
+			demo_runner.py             Scenario-to-graph adapter
+		orchestrator/
+			graph.py                   LangGraph workflow
+			nodes.py                   Workflow node adapters
+			edges.py                   Triage route selection
+			schema.py                  Shared dataclasses
+			state.py                   Graph state contract
+		agents/
+			detection_agent.py
+			triage_agent.py
+			threat_intel_agent.py
+			response_agent.py
+			forensics_agent.py
+			compliance_agent.py
+			deception_agent.py
+			vuln_agent.py
+		telemetry/                   Telemetry ingestion and time windows
+		messaging/                   Event bus abstractions
+		quantum/                     QML bridge compatibility adapter
+		crypto/                      AES, PQC, and BB84 simulation scaffolding
+		ui/streamlit_app.py          Streamlit dashboard
+knowledge/                       SOC playbooks and local knowledge
+models/classifier/               Local classifier asset location
+docs/                             Design and UI planning documents
 ```
 
-Tabs included:
+## Input And Output Contract
 
-- Overview
-- Agentic Workflow (explainer)
-- Triage
-- Containment
-- Compliance
-- SOC Summary
+The orchestrator accepts a dictionary containing fields such as:
+
+```python
+{
+		"message": "...",
+		"logs": ["timestamped log line", "another log line"],
+		"source_ip": "10.20.4.18",
+		"asset_type": "ehr_server",
+		"clinical_impact": "high",
+		"contains_phi": True,
+		"telemetry_signals": {"signal_strength": 0.5},
+}
+```
+
+Detection returns an `alert_object` containing the original alert data plus:
+
+```python
+{
+		"qml_label": "ransomware",
+		"composite_confidence": 0.50,
+		"analysis": {
+				"attack_vector": "endpoint",
+				"evidence": [...],
+				"iocs": [...],
+				"likely_cwes": [...],
+				"affected": [...],
+		},
+		"cwss": {
+				"score": 7.85,
+				"vector": "endpoint",
+				"rationale": "...",
+		},
+}
+```
+
+The complete graph state additionally contains triage, threat intelligence,
+response, forensics, compliance, routing, and final summary fields.
+
+## Configuration
+
+Configuration is loaded by `src/quallki_agentic/config.py`. Important settings
+include:
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `APP_NAME` | Application name | `quallki-agentic` |
+| `DOMAIN_PROFILE` | Domain profile | `healthcare` |
+| `DEMO_MODE` | Demo behavior flag | `true` |
+| `ENABLE_EVENT_BUS` | Publish workflow events | `false` |
+| `MESSAGE_BUS_BACKEND` | Event bus backend | `redis` |
+| `REDIS_URL` | Redis connection URL | `redis://localhost:6379/0` |
+| `REDIS_STREAM_NAME` | Redis stream name | `qualki.events` |
+| `KNOWLEDGE_DIR` | Local playbook directory | `knowledge` |
+| `LOCAL_CLASSIFIER_MODEL_PATH` | Legacy classifier asset location | `models/classifier` |
+| `USE_OPENAI` | Enable optional response drafting | `false` |
+| `OPENAI_MODEL` | OpenAI response model | `gpt-4o-mini` |
+| `LLM_PROVIDER` | Optional provider setting | `gemini` |
+| `GEMINI_MODEL` | Optional Gemini model setting | `gemini-2.5-pro` |
+
+The current orchestrator detection and triage path is deterministic and does
+not require Gemini or OpenAI credentials. Optional provider integrations should
+be treated as future extensions until explicitly wired into the desired flow.
+
+## Development Checks
+
+Compile all Python modules:
+
+```powershell
+\.venv\Scripts\python.exe -m compileall -q src
+```
+
+Run all healthcare simulations:
+
+```powershell
+$env:PYTHONPATH = "src"
+\.venv\Scripts\python.exe -c "from quallki_agentic.healthcare import HOSPITAL_DEMO_CASES; from quallki_agentic.healthcare.demo_runner import run_healthcare_demo_scenario; print([(key, run_healthcare_demo_scenario(key)['result']['triage_result']['priority']) for key in HOSPITAL_DEMO_CASES])"
+```
+
+Use the repository virtual environment when available so installed LangGraph
+and Streamlit dependencies match the project environment.
+
+## Safety And Scope
+
+This project is intended for defensive security research, SOC workflow design,
+and healthcare incident-response demonstrations. The built-in scenarios are
+synthetic. Response actions are text recommendations and do not invoke a
+firewall, endpoint controller, identity provider, or clinical system.
+
+Before connecting real telemetry or automated response integrations, add:
+
+- Authentication and authorization for every integration
+- Approval gates for disruptive actions
+- Audit logging and immutable evidence storage
+- PHI minimization and access controls
+- Alert deduplication and rate limiting
+- Human review for clinical-impacting containment
+
+## Current Limitations And Next Steps
+
+- The QML model is a label-only stub and should be replaced by a controlled
+	inference service when the QML artifact is ready.
+- Log analysis uses deterministic heuristics, not a production parser or SIEM
+	query engine.
+- CWSS-like scoring is an explainable demo heuristic, not an official CWSS
+	implementation or vulnerability certification.
+- Threat intelligence is local and limited to basic ATT&CK/CVE mapping.
+- Response, forensics, and compliance outputs are demonstrations and should be
+	integrated with approved enterprise systems only after review.
+- Add automated unit and integration tests as the agent contracts stabilize.
+- Add a real telemetry adapter, event-bus workers, analyst feedback capture,
+	and persisted incident history.
+
+## License And Project Status
+
+This repository is an active prototype and does not currently declare a
+production license in its package metadata. Review and add the appropriate
+license before distributing it outside the intended project context.

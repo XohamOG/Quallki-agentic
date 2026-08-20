@@ -21,7 +21,6 @@ class Settings:
     redis_stream_name: str = "qualki.events"
     knowledge_dir: str = "knowledge"
     local_classifier_model_path: str = "models/classifier"
-    classical_model_path: str = "best_regularized_model.joblib"
     model_label_list: str = "BaseLine,Alice2,DevEva,Discov,Hulk,Nmap,NosyN,Ransac,SlowLoris,SuperSpy"
 
     @classmethod
@@ -48,9 +47,6 @@ class Settings:
             knowledge_dir=os.getenv("KNOWLEDGE_DIR", "knowledge"),
             local_classifier_model_path=os.getenv(
                 "LOCAL_CLASSIFIER_MODEL_PATH", "models/classifier"
-            ),
-            classical_model_path=os.getenv(
-                "CLASSICAL_MODEL_PATH", "best_regularized_model.joblib"
             ),
             model_label_list=os.getenv(
                 "MODEL_LABEL_LIST",

@@ -12,7 +12,6 @@ class AlertObject:
     event_time: str
     message: str
     qml_label: str
-    qml_confidence: float
     iocs: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 

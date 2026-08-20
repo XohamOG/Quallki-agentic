@@ -13,7 +13,6 @@ class OrchestratorState(TypedDict, total=False):
     alert_id: str
     event_time: str
     qml_label: str
-    qml_confidence: float
     iocs: list[str]
 
     alert_object: dict

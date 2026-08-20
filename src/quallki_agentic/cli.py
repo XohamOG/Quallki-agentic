@@ -33,6 +33,19 @@ def main() -> None:
     print(f"Label: {label}")
     print(f"Confidence: {confidence:.2f}")
 
+    print("\nSimulated Logs:")
+    for log in run_data.get("logs", []):
+        print(f"- {log}")
+
+    alert = result.get("alert_object", {})
+    if isinstance(alert, dict):
+        analysis = alert.get("analysis", {})
+        print("\nDetection Analysis:")
+        print(f"Attack vector: {analysis.get('attack_vector', 'unknown')}")
+        print(f"IOCs: {', '.join(analysis.get('iocs', [])) or 'none'}")
+        print(f"Likely CWEs: {', '.join(analysis.get('likely_cwes', [])) or 'none'}")
+        print(f"CWSS-like score: {alert.get('cwss', {}).get('score', 0.0)}")
+
     triage = result.get("triage_result", {})
     if isinstance(triage, dict):
         print(f"Priority: {triage.get('priority', 'P4')}")

@@ -60,6 +60,22 @@ with tab_overview:
             "source_ip": scenario.get("source_ip"),
         }
     )
+    st.subheader("Simulated Attack Logs")
+    st.code("\n".join(run_data.get("logs", [])) or "No logs generated.", language="text")
+
+    alert = result.get("alert_object", {})
+    analysis = alert.get("analysis", {}) if isinstance(alert, dict) else {}
+    cwss = alert.get("cwss", {}) if isinstance(alert, dict) else {}
+    st.subheader("Detection Evidence")
+    st.json(
+        {
+            "attack_vector": analysis.get("attack_vector", "unknown"),
+            "evidence": analysis.get("evidence", []),
+            "iocs": analysis.get("iocs", []),
+            "likely_cwes": analysis.get("likely_cwes", []),
+            "cwss_score": cwss.get("score", 0.0),
+        }
+    )
 
 with tab_workflow:
     st.subheader("How the Agentic System Works")

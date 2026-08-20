@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from quallki_agentic.healthcare import HOSPITAL_DEMO_CASES
 from quallki_agentic.orchestrator import build_orchestrator_graph
-from quallki_agentic.quantum.ensemble import QuantumEnsembleClient
+from quallki_agentic.qml_stub import infer
 from quallki_agentic.telemetry.ingestion import TelemetryIngestion
 
 
@@ -14,10 +14,8 @@ def run_healthcare_demo_scenario(scenario_key: str) -> dict[str, object]:
     message = str(scenario["message"])
 
     telemetry = TelemetryIngestion()
-    detector = QuantumEnsembleClient()
-
     raw = telemetry.ingest_alert(message, source_ip=str(scenario["source_ip"]))
-    label, confidence = detector.infer_label(message)
+    label = infer({"message": message})["label"]
 
     payload = {
         "message": message,
@@ -27,7 +25,8 @@ def run_healthcare_demo_scenario(scenario_key: str) -> dict[str, object]:
         "clinical_impact": scenario.get("clinical_impact", "medium"),
         "source_ip": str(raw.get("source_ip", "0.0.0.0")),
         "qml_label": label,
-        "qml_confidence": confidence,
+        "telemetry_signals": {"signal_strength": 0.5},
+        "logs": list(scenario.get("logs", [])),
     }
 
     result = build_orchestrator_graph().invoke(payload)
@@ -35,7 +34,8 @@ def run_healthcare_demo_scenario(scenario_key: str) -> dict[str, object]:
         "scenario_key": scenario_key,
         "scenario": scenario,
         "label": label,
-        "confidence": confidence,
+        "confidence": result.get("alert_object", {}).get("composite_confidence", 0.0),
         "result": result,
         "payload": payload,
+        "logs": payload["logs"],
     }
