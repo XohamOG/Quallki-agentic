@@ -131,29 +131,55 @@ with tab_detection:
 with tab_comparison:
     st.subheader("Quantum vs Classical Model Comparison")
     st.caption("Live inference comparison between the 6-qubit QML VQC and the LightGBM Classical Model.")
-    
+
     qml_label = alert.get("qml_label", "unknown") if isinstance(alert, dict) else "unknown"
     classical_label = alert.get("classical_label", "unknown") if isinstance(alert, dict) else "unknown"
     backend = alert.get("qml_backend", "unknown") if isinstance(alert, dict) else "unknown"
-    
+    agree = (qml_label == classical_label and qml_label != "unknown")
+
+    # Agreement / disagreement banner
+    if agree:
+        st.success(f"✅ **Both models agree:** `{qml_label}`")
+    elif classical_label == "unknown":
+        st.warning("⚠️ Classical model prediction unavailable.")
+    else:
+        st.warning(
+            f"⚠️ **Model Disagreement** — QML predicts `{qml_label}` · Classical predicts `{classical_label}`\n\n"
+            "This is expected with the current 6-qubit VQC: the quantum circuit has limited expressivity "
+            "and can collapse toward a dominant class across most feature distributions. "
+            "The **Classical LightGBM** prediction is more reliable for production triage. "
+            "Retraining the QML with more qubits or better class-balancing would resolve this."
+        )
+
     col_qml, col_classical = st.columns(2)
     with col_qml:
-        st.info("### Quantum VQC Model")
+        st.markdown("#### 🔬 Quantum VQC Model")
         st.metric("Prediction", str(qml_label))
         st.caption(f"Backend: `{backend}`")
-        if qml_label != "unknown":
-            st.success("Quantum Model actively deployed.")
-            
+        st.markdown(
+            "**Architecture:** 99-feature → Autoencoder (99→64→6) → 6-qubit VQC → 10-class linear head  \n"
+            "**Limitation:** 6-qubit circuits have limited expressivity; may over-predict dominant class. "
+            "Treat as a research-grade signal, not a production classifier."
+        )
+
     with col_classical:
-        st.info("### Classical LightGBM Model")
+        st.markdown("#### 🤖 Classical LightGBM Model")
         st.metric("Prediction", str(classical_label))
-        st.caption(f"Backend: `best_regularized_model.joblib`")
-        if classical_label == "unknown":
-            st.warning("Classical model prediction unavailable.")
-        elif classical_label != qml_label:
-            st.warning("Model Disagreement!")
-        else:
-            st.success("Models agree on prediction.")
+        st.caption("Backend: `best_regularized_model.joblib`")
+        st.markdown(
+            "**Architecture:** Trained LightGBM gradient boosting on the full 99-feature schema  \n"
+            "**Reliability:** Higher accuracy across all attack classes. "
+            "Recommended as the primary label for triage and response decisions."
+        )
+
+    # Trust recommendation
+    st.divider()
+    st.markdown("#### 📊 Which model to trust for triage?")
+    trust_col1, trust_col2 = st.columns(2)
+    with trust_col1:
+        st.markdown("**QML VQC** — Use for research, benchmarking, and quantum AI demonstration only.")
+    with trust_col2:
+        st.markdown("**Classical LightGBM** — Use for production alert classification, priority, and response.")
 
 with tab_workflow:
     st.subheader("LangGraph Execution Trace")
@@ -209,10 +235,90 @@ with tab_compliance:
         "This is a control-to-evidence mapping, not a compliance certification. "
         "Open each source and have the named control owner validate the required evidence."
     )
+
     if isinstance(compliance_assessment, dict):
-        st.write(compliance_assessment)
+        col_a, col_b, col_c, col_d = st.columns(4)
+        col_a.metric("Applicable Controls", compliance_assessment.get("applicable_controls", 0))
+        col_b.metric("✅ Evidence Complete", compliance_assessment.get("evidence_complete", 0))
+        col_c.metric("⚠️ Partial", compliance_assessment.get("partial", 0))
+        col_d.metric("❌ Not Evidenced", compliance_assessment.get("not_evidenced", 0))
+
     if isinstance(checklist, list) and checklist:
-        st.dataframe(checklist, width="stretch")
+        STATUS_ICON = {
+            "evidence_complete": "✅",
+            "partial": "⚠️",
+            "not_evidenced": "❌",
+            "not_applicable": "⚪",
+        }
+        STATUS_COLOR = {
+            "evidence_complete": "#1a7a4a",
+            "partial": "#b58900",
+            "not_evidenced": "#cc3300",
+            "not_applicable": "#888888",
+        }
+
+        # Group by status for a clear visual order
+        order = ["evidence_complete", "partial", "not_evidenced", "not_applicable"]
+        grouped: dict[str, list] = {s: [] for s in order}
+        for row in checklist:
+            s = row.get("status", "not_applicable")
+            grouped.setdefault(s, []).append(row)
+
+        for status in order:
+            rows = grouped.get(status, [])
+            if not rows:
+                continue
+            icon = STATUS_ICON.get(status, "")
+            color = STATUS_COLOR.get(status, "#888")
+            label = status.replace("_", " ").title()
+            st.markdown(f"### {icon} {label}")
+            for row in rows:
+                ctrl_id = row.get("id", "—")
+                framework = row.get("framework", "—")
+                control_desc = row.get("control", "—")
+                owner = row.get("owner", "—")
+                source_url = row.get("source_url", "")
+                present = row.get("evidence_present", [])
+                missing = row.get("evidence_missing", [])
+
+                link_text = f"[📄 {ctrl_id} — {framework}]({source_url})" if source_url else f"**{ctrl_id} — {framework}**"
+                badge = f'<span style="background:{color};color:white;padding:2px 8px;border-radius:4px;font-size:0.8em">{icon} {label}</span>'
+
+                with st.expander(f"{icon}  {ctrl_id}  |  {framework}", expanded=(status == "evidence_complete")):
+                    st.markdown(f"{badge}", unsafe_allow_html=True)
+                    st.markdown(f"**Control:** {control_desc}")
+                    st.markdown(f"**Owner:** `{owner}`")
+                    if source_url:
+                        st.markdown(f"**Source Document:** {link_text}")
+                    if present:
+                        st.markdown(f"**Evidence Present:** `{'`, `'.join(present)}`")
+                    if missing:
+                        st.markdown(f"**Evidence Missing:** `{'`, `'.join(missing)}`")
+                    st.caption("A qualified control owner or independent auditor must validate the above evidence.")
+
+        # Raw data table (full detail)
+        st.divider()
+        with st.expander("📋 Raw Compliance Data Table", expanded=False):
+            import pandas as pd
+            table_rows = []
+            for row in checklist:
+                table_rows.append({
+                    "ID": row.get("id", ""),
+                    "Framework": row.get("framework", ""),
+                    "Status": row.get("status", ""),
+                    "Owner": row.get("owner", ""),
+                    "Evidence Present": ", ".join(row.get("evidence_present", [])) or "—",
+                    "Evidence Missing": ", ".join(row.get("evidence_missing", [])) or "—",
+                    "Source URL": row.get("source_url", ""),
+                })
+            df_compliance = pd.DataFrame(table_rows)
+            st.dataframe(
+                df_compliance,
+                column_config={
+                    "Source URL": st.column_config.LinkColumn("Source URL", display_text="📄 Open"),
+                },
+                use_container_width=True,
+            )
     else:
         st.info("No compliance checklist available")
 
