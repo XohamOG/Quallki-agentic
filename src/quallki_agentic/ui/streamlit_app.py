@@ -72,6 +72,7 @@ st.caption(f"Inference backend: {run_data.get('qml_backend', 'unknown')}")
 (
     tab_overview,
     tab_detection,
+    tab_comparison,
     tab_triage,
     tab_threat_intel,
     tab_response,
@@ -83,6 +84,7 @@ st.caption(f"Inference backend: {run_data.get('qml_backend', 'unknown')}")
     [
         "Overview",
         "Detection",
+        "Model Comparison",
         "Triage",
         "Threat Intel",
         "Response",
@@ -125,6 +127,33 @@ with tab_detection:
     st.subheader("Detection Agent Output")
     st.caption("Local autoencoder + VQC inference, log analysis, IOC extraction, and severity scoring.")
     st.json(alert if isinstance(alert, dict) else {})
+
+with tab_comparison:
+    st.subheader("Quantum vs Classical Model Comparison")
+    st.caption("Live inference comparison between the 6-qubit QML VQC and the LightGBM Classical Model.")
+    
+    qml_label = alert.get("qml_label", "unknown") if isinstance(alert, dict) else "unknown"
+    classical_label = alert.get("classical_label", "unknown") if isinstance(alert, dict) else "unknown"
+    backend = alert.get("qml_backend", "unknown") if isinstance(alert, dict) else "unknown"
+    
+    col_qml, col_classical = st.columns(2)
+    with col_qml:
+        st.info("### Quantum VQC Model")
+        st.metric("Prediction", str(qml_label))
+        st.caption(f"Backend: `{backend}`")
+        if qml_label != "unknown":
+            st.success("Quantum Model actively deployed.")
+            
+    with col_classical:
+        st.info("### Classical LightGBM Model")
+        st.metric("Prediction", str(classical_label))
+        st.caption(f"Backend: `best_regularized_model.joblib`")
+        if classical_label == "unknown":
+            st.warning("Classical model prediction unavailable.")
+        elif classical_label != qml_label:
+            st.warning("Model Disagreement!")
+        else:
+            st.success("Models agree on prediction.")
 
 with tab_workflow:
     st.subheader("LangGraph Execution Trace")

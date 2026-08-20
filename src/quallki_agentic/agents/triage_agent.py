@@ -23,45 +23,34 @@ class TriageAgent(BaseAgent):
         evidence: list[str],
         affected_assets: list[object],
     ) -> dict[str, object] | None:
-        if not self._settings.use_gemini or not os.getenv("GEMINI_API_KEY"):
-            return None
+        from quallki_agentic.llm_helper import invoke_gemini
 
-        try:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-
-            llm = ChatGoogleGenerativeAI(
-                model=self._settings.gemini_model,
-                google_api_key=os.environ["GEMINI_API_KEY"],
-                temperature=0,
-            )
-            prompt = (
-                "You are a healthcare SOC reasoning specialist. Return strict JSON only with "
-                "keys reasoning and recommended_fixes. Do not change priority, route, or confidence. "
-                "Do not claim compliance or certainty. Keep reasoning under 45 words and provide "
-                "at most 4 concise fixes. Never recommend disruptive clinical action without human approval.\n\n"
-                f"QML label: {label}\n"
-                f"Composite confidence: {confidence:.4f}\n"
-                f"CWSS-like score: {cwss_score:.2f}\n"
-                f"Attack vector: {attack_vector}\n"
-                f"Clinical impact: {clinical_impact}\n"
-                f"Evidence: {evidence}\n"
-                f"Affected assets: {affected_assets}\n"
-            )
-            raw = str(llm.invoke(prompt).content).strip()
-            start, end = raw.find("{"), raw.rfind("}")
-            if start == -1 or end == -1:
-                return None
-            parsed = json.loads(raw[start : end + 1])
-            fixes = parsed.get("recommended_fixes", [])
-            if not isinstance(fixes, list):
-                fixes = []
-            return {
-                "reasoning": str(parsed.get("reasoning", "Gemini reasoning completed.")),
-                "recommended_fixes": [str(item) for item in fixes[:4]],
-                "backend": "gemini",
-            }
-        except Exception:
+        prompt = (
+            "You are a healthcare SOC reasoning specialist. Return strict JSON only with "
+            "keys reasoning and recommended_fixes. Do not change priority, route, or confidence. "
+            "Do not claim compliance or certainty. Keep reasoning under 45 words and provide "
+            "at most 4 concise fixes. Never recommend disruptive clinical action without human approval.\n\n"
+            f"QML label: {label}\n"
+            f"Composite confidence: {confidence:.4f}\n"
+            f"CWSS-like score: {cwss_score:.2f}\n"
+            f"Attack vector: {attack_vector}\n"
+            f"Clinical impact: {clinical_impact}\n"
+            f"Evidence: {evidence}\n"
+            f"Affected assets: {affected_assets}\n"
+        )
+        
+        parsed = invoke_gemini(prompt)
+        if not parsed:
             return None
+            
+        fixes = parsed.get("recommended_fixes", [])
+        if not isinstance(fixes, list):
+            fixes = []
+        return {
+            "reasoning": str(parsed.get("reasoning", "Gemini reasoning completed.")),
+            "recommended_fixes": [str(item) for item in fixes[:4]],
+            "backend": "gemini",
+        }
 
     def run(self, payload: dict[str, object]) -> dict[str, object]:
         alert = payload.get("alert_object", {})

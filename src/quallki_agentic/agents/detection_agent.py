@@ -15,11 +15,33 @@ class DetectionAgent(BaseAgent):
         source_ip = str(payload.get("source_ip", "0.0.0.0"))
         alert_id = str(payload.get("alert_id", "alert-auto"))
         event_time = str(payload.get("event_time", now_iso()))
-        qml_result = infer_with_metadata(payload)
-        qml_label = str(qml_result.get("label", "unknown"))
         contains_phi = bool(payload.get("contains_phi", False))
         clinical_impact = str(payload.get("clinical_impact", "medium"))
         asset_type = str(payload.get("asset_type", "unknown"))
+
+        if source_ip == "0.0.0.0" and not message and payload.get("logs"):
+            from quallki_agentic.llm_helper import invoke_gemini
+            prompt = (
+                "You are a SOC parser. Extract the following from the raw logs provided below. "
+                "Return strict JSON with keys: message, source_ip, asset_type, clinical_impact, contains_phi (boolean). "
+                "Guess impact (low/medium/high/critical) and asset_type (e.g. ehr_server, pacs, endpoint) from context.\n\n"
+                f"Logs: {payload['logs']}"
+            )
+            parsed = invoke_gemini(prompt)
+            if parsed:
+                message = str(parsed.get("message", message))
+                source_ip = str(parsed.get("source_ip", source_ip))
+                asset_type = str(parsed.get("asset_type", asset_type))
+                clinical_impact = str(parsed.get("clinical_impact", clinical_impact))
+                contains_phi = bool(parsed.get("contains_phi", contains_phi))
+                # Update payload so downstream components get the enriched data
+                payload["message"] = message
+                payload["source_ip"] = source_ip
+                payload["asset_type"] = asset_type
+                payload["clinical_impact"] = clinical_impact
+                payload["contains_phi"] = contains_phi
+        qml_result = infer_with_metadata(payload)
+        qml_label = str(qml_result.get("label", "unknown"))
         analysis = analyze(payload, qml_label)
         iocs = analysis["iocs"]
         cwss = score_cwss(qml_label, analysis, clinical_impact)
@@ -49,4 +71,5 @@ class DetectionAgent(BaseAgent):
         alert_dict["analysis"] = analysis
         alert_dict["cwss"] = cwss
         alert_dict["qml_backend"] = qml_result.get("backend", "unknown")
+        alert_dict["classical_label"] = qml_result.get("classical_label", "unknown")
         return {"alert_object": alert_dict, "iocs": iocs}

@@ -15,7 +15,7 @@ class Settings:
     enable_event_bus: bool = False
     domain_profile: str = "healthcare"
     llm_provider: str = "none"
-    gemini_model: str = "gemini-2.5-pro"
+    gemini_model: str = "gemini-3.5-flash"
     use_openai: bool = False
     use_gemini: bool = True
     openai_model: str = "gpt-4o-mini"

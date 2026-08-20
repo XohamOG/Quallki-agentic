@@ -7,16 +7,18 @@ from quallki_agentic.qml_model import QMLVQCClassifier, canonical_label
 
 
 _classifier: QMLVQCClassifier | None = None
+_classical: Any = None
 
 
 def infer_with_metadata(payload: dict[str, Any]) -> dict[str, str]:
-    global _classifier
+    global _classifier, _classical
     has_model_input = any(
         key in payload for key in ("feature_vector", "features", "qml_input", "logs")
     )
     qml_label = payload.get("qml_label")
     if qml_label and not has_model_input:
         return {"label": str(qml_label), "backend": "explicit_label"}
+    
     if _classifier is None:
         settings = Settings.from_env()
         _classifier = QMLVQCClassifier(
@@ -24,13 +26,29 @@ def infer_with_metadata(payload: dict[str, Any]) -> dict[str, str]:
             settings.qml_autoencoder_path,
             settings.qml_preprocessing_path,
         )
-    if _classifier.available:
-        return {
-            "label": canonical_label(_classifier.predict_label(payload)),
-            "backend": "qml_vqc",
-        }
-
-    return {"label": _heuristic_label(payload), "backend": "heuristic_stub"}
+    
+    if _classical is None:
+        try:
+            from quallki_agentic.classical_model import ClassicalClassifier
+            _classical = ClassicalClassifier("best_regularized_model.joblib")
+        except Exception:
+            _classical = None
+            
+    result = {}
+    
+    if _classifier and _classifier.available:
+        result["label"] = canonical_label(_classifier.predict_label(payload))
+        result["backend"] = "qml_vqc"
+    else:
+        result["label"] = _heuristic_label(payload)
+        result["backend"] = "heuristic_stub"
+        
+    if _classical and _classical.available:
+        result["classical_label"] = canonical_label(_classical.predict_label(payload))
+    else:
+        result["classical_label"] = "unknown"
+        
+    return result
 
 
 def _heuristic_label(payload: dict[str, Any]) -> str:
