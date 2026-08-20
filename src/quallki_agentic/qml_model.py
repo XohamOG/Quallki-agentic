@@ -7,6 +7,7 @@ import numpy as np
 
 from quallki_agentic.config import Settings
 from quallki_agentic.feature_schema import build_feature_vector
+from quallki_agentic.qml_preprocessing import QMLPreprocessor
 
 MODEL_LABELS = (
     "BaseLine", "Alice2", "DevEva", "Discov", "Hulk",
@@ -14,7 +15,9 @@ MODEL_LABELS = (
 )
 
 
-def _six_inputs(payload: dict[str, Any], encoder: Any = None) -> np.ndarray:
+def _six_inputs(
+    payload: dict[str, Any], encoder: Any = None, preprocessor: QMLPreprocessor | None = None
+) -> np.ndarray:
     raw = payload.get("qml_input")
     if isinstance(raw, (list, tuple)):
         if len(raw) != 6:
@@ -22,33 +25,38 @@ def _six_inputs(payload: dict[str, Any], encoder: Any = None) -> np.ndarray:
         return np.asarray(raw, dtype=np.float32)
 
     values, _ = build_feature_vector(payload)
-    if encoder is None:
-        raise RuntimeError("The 99-to-6 autoencoder is required for QML inference")
+    if encoder is None or preprocessor is None:
+        raise RuntimeError(
+            "The autoencoder and training preprocessing artifact are required for raw-feature inference"
+        )
     import torch
 
+    values = preprocessor.transform(values).tolist()
     with torch.inference_mode():
         encoded = encoder(torch.from_numpy(np.asarray(values, dtype=np.float32)).reshape(1, -1))
-    return encoded.detach().cpu().numpy().reshape(6).astype(np.float32)
+    return preprocessor.scale_latent_to_pi(encoded.detach().cpu().numpy().reshape(6))
 
 
 class QMLVQCClassifier:
     """Adapter for the supplied 6-qubit VQC checkpoint.
 
     The checkpoint stores a StronglyEntanglingLayers tensor with shape
-    ``(4, 6, 3)`` and a ten-class linear head. Since preprocessing metadata is
-    not included, real callers can provide six preprocessed values as
-    ``qml_input``; otherwise this adapter uses the documented 99-to-6 group
-    reduction in ``_six_inputs``.
+    ``(4, 6, 3)`` and a ten-class linear head. Raw callers must provide the
+    training preprocessing artifact; six preprocessed values can be supplied
+    as ``qml_input`` for diagnostics.
     """
 
-    def __init__(self, model_path: str, autoencoder_path: str) -> None:
+    def __init__(self, model_path: str, autoencoder_path: str, preprocessing_path: str) -> None:
         self.model_path = model_path
         self.autoencoder_path = autoencoder_path
+        self.preprocessing_path = preprocessing_path
         self._model: Any = None
         self._encoder: Any = None
+        self._preprocessor: QMLPreprocessor | None = None
         self.load_error: str | None = None
         try:
             self._encoder = self._load_autoencoder(autoencoder_path)
+            self._preprocessor = QMLPreprocessor(preprocessing_path)
             self._model = self._load(model_path)
         except Exception as exc:
             self.load_error = f"{type(exc).__name__}: {exc}"
@@ -157,7 +165,9 @@ class QMLVQCClassifier:
             raise RuntimeError(self.load_error or "QML model is unavailable")
         import torch
 
-        inputs = torch.from_numpy(_six_inputs(payload, self._encoder)).reshape(1, 6)
+        inputs = torch.from_numpy(
+            _six_inputs(payload, self._encoder, self._preprocessor)
+        ).reshape(1, 6)
         with torch.inference_mode():
             logits = self._model(inputs)
         return MODEL_LABELS[int(torch.argmax(logits, dim=1).item())]

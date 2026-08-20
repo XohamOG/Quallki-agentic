@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
+
 import streamlit as st
 
 from quallki_agentic.healthcare import HOSPITAL_DEMO_CASES
-from quallki_agentic.healthcare.demo_runner import run_healthcare_demo_scenario
+from quallki_agentic.healthcare.demo_runner import run_alert_payload, run_healthcare_demo_scenario
 
 
 st.set_page_config(page_title="QUAL-KI Healthcare SOC Demo", layout="wide")
@@ -13,23 +15,50 @@ st.caption(
     "Scenario-driven hospital cybersecurity demonstration with agentic triage, containment, and compliance evidence."
 )
 
-scenario_key = st.sidebar.selectbox(
-    "Select Hospital Scenario",
-    options=sorted(HOSPITAL_DEMO_CASES.keys()),
-    index=0,
-)
+input_mode = st.sidebar.radio("Input source", ["Live JSON/JSONL", "Synthetic demo"], index=0)
+scenario_key = None
+uploaded_file = None
+if input_mode == "Synthetic demo":
+    scenario_key = st.sidebar.selectbox(
+        "Select Hospital Scenario",
+        options=sorted(HOSPITAL_DEMO_CASES.keys()),
+        index=0,
+    )
+else:
+    uploaded_file = st.sidebar.file_uploader("Upload alert JSON or JSONL", type=["json", "jsonl", "txt"])
 
 if st.sidebar.button("Run Agentic SOC"):
-    st.session_state["run_data"] = run_healthcare_demo_scenario(scenario_key)
+    if input_mode == "Synthetic demo" and scenario_key:
+        st.session_state["run_data"] = run_healthcare_demo_scenario(scenario_key)
+        st.session_state["run_mode"] = input_mode
+    elif uploaded_file is not None:
+        raw_text = uploaded_file.getvalue().decode("utf-8").strip()
+        try:
+            parsed = json.loads(raw_text)
+            record = parsed[0] if isinstance(parsed, list) else parsed
+            if not isinstance(record, dict):
+                raise ValueError("The uploaded JSON must contain an object or a list of objects")
+            st.session_state["run_data"] = run_alert_payload(record)
+            st.session_state["run_mode"] = input_mode
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+            st.error(f"Could not load alert input: {exc}")
 
-run_data = st.session_state.get("run_data")
+run_data = st.session_state.get("run_data") if st.session_state.get("run_mode") == input_mode else None
 if run_data is None:
-    run_data = run_healthcare_demo_scenario(scenario_key)
+    if input_mode == "Synthetic demo" and scenario_key:
+        run_data = run_healthcare_demo_scenario(scenario_key)
+    else:
+        st.info("Upload a real JSON/JSONL alert and click Run Agentic SOC.")
+        st.stop()
 
 result = run_data["result"]
 scenario = run_data["scenario"]
+alert = result.get("alert_object", {})
 triage = result.get("triage_result", {})
+threat_intel = result.get("threat_intel_result", {})
 response_actions = result.get("response_actions", [])
+assignments = result.get("assignments", [])
+forensics_summary = result.get("forensics_summary", "")
 checklist = result.get("compliance_checklist", [])
 compliance_assessment = result.get("compliance_assessment", {})
 
@@ -40,13 +69,26 @@ metric_col3.metric("Priority", str(triage.get("priority", "P4")) if isinstance(t
 metric_col4.metric("Scenario", run_data["scenario_key"])
 st.caption(f"Inference backend: {run_data.get('qml_backend', 'unknown')}")
 
-tab_overview, tab_workflow, tab_triage, tab_response, tab_compliance, tab_summary = st.tabs(
+(
+    tab_overview,
+    tab_detection,
+    tab_triage,
+    tab_threat_intel,
+    tab_response,
+    tab_forensics,
+    tab_compliance,
+    tab_workflow,
+    tab_summary,
+) = st.tabs(
     [
         "Overview",
-        "Agentic Workflow",
+        "Detection",
         "Triage",
-        "Containment",
+        "Threat Intel",
+        "Response",
+        "Forensics",
         "Compliance",
+        "LangGraph Trace",
         "SOC Summary",
     ]
 )
@@ -60,12 +102,12 @@ with tab_overview:
             "contains_phi": scenario.get("contains_phi"),
             "clinical_impact": scenario.get("clinical_impact"),
             "source_ip": scenario.get("source_ip"),
+            "simulation": run_data.get("payload", {}).get("simulation", {}),
         }
     )
     st.subheader("Simulated Attack Logs")
     st.code("\n".join(run_data.get("logs", [])) or "No logs generated.", language="text")
 
-    alert = result.get("alert_object", {})
     analysis = alert.get("analysis", {}) if isinstance(alert, dict) else {}
     cwss = alert.get("cwss", {}) if isinstance(alert, dict) else {}
     st.subheader("Detection Evidence")
@@ -79,18 +121,24 @@ with tab_overview:
         }
     )
 
+with tab_detection:
+    st.subheader("Detection Agent Output")
+    st.caption("Local autoencoder + VQC inference, log analysis, IOC extraction, and severity scoring.")
+    st.json(alert if isinstance(alert, dict) else {})
+
 with tab_workflow:
-    st.subheader("How the Agentic System Works")
-    st.markdown(
-        """
-1. Detection Agent enriches incoming hospital security alert into a structured alert object.
-2. Triage Agent scores priority and selects routing path.
-3. Threat Intel Agent maps likely ATT&CK context.
-4. Response Agent proposes containment actions with clinical safety checks.
-5. Forensics Agent prepares timeline context for incident review.
-6. Compliance Agent generates HIPAA/GDPR/ISO27001/SOC2/NIS2 checklist evidence.
-        """
-    )
+    st.subheader("LangGraph Execution Trace")
+    st.caption("Each entry is the state update returned by a real graph node for this run.")
+    trace = run_data.get("workflow_trace", [])
+    if isinstance(trace, list) and trace:
+        for index, entry in enumerate(trace, start=1):
+            if not isinstance(entry, dict):
+                continue
+            node = str(entry.get("node", "unknown"))
+            with st.expander(f"{index}. {node}", expanded=index == 1):
+                st.json(entry.get("output", {}))
+    else:
+        st.info("No streamed graph updates available.")
 
 with tab_triage:
     st.subheader("Triage Reasoning")
@@ -100,19 +148,31 @@ with tab_triage:
                 "priority": triage.get("priority"),
                 "confidence": triage.get("confidence"),
                 "reasoning": triage.get("reasoning"),
+                "reasoning_backend": triage.get("reasoning_backend", "deterministic"),
+                "recommended_fixes": triage.get("recommended_fixes", []),
                 "auto_close": triage.get("auto_close"),
             }
         )
     else:
         st.info("No triage details available")
 
+with tab_threat_intel:
+    st.subheader("Threat Intelligence Agent Output")
+    st.json(threat_intel if isinstance(threat_intel, dict) else {})
+
 with tab_response:
-    st.subheader("Containment Actions")
+    st.subheader("Response Agent Output")
+    if isinstance(assignments, list) and assignments:
+        st.write({"assignments": assignments})
     if isinstance(response_actions, list) and response_actions:
         for index, action in enumerate(response_actions, start=1):
             st.write(f"{index}. {action}")
     else:
         st.info("No containment actions generated")
+
+with tab_forensics:
+    st.subheader("Forensics Agent Output")
+    st.write(forensics_summary or "No forensics summary generated.")
 
 with tab_compliance:
     st.subheader("Compliance Evidence Mapping")

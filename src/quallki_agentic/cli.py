@@ -1,40 +1,75 @@
 from __future__ import annotations
 
 import argparse
+import json
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 from quallki_agentic.healthcare import HOSPITAL_DEMO_CASES
-from quallki_agentic.healthcare.demo_runner import run_healthcare_demo_scenario
+from quallki_agentic.healthcare.demo_runner import run_alert_payload, run_healthcare_demo_scenario
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Quallki agentic SOC triage runner")
     parser.add_argument(
         "--scenario",
-        default="ehr_ransomware",
         choices=sorted(HOSPITAL_DEMO_CASES.keys()),
-        help="Healthcare demo scenario key",
+        help="Run a built-in synthetic healthcare scenario",
+    )
+    parser.add_argument(
+        "--input",
+        type=Path,
+        help="Run a real normalized alert from a JSON file or JSONL file",
     )
     return parser.parse_args()
+
+
+def _load_input(path: Path) -> list[dict[str, object]]:
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        raise ValueError("Input file is empty")
+    try:
+        parsed = json.loads(text)
+        records = parsed if isinstance(parsed, list) else [parsed]
+    except json.JSONDecodeError:
+        records = [json.loads(line) for line in text.splitlines() if line.strip()]
+    if not all(isinstance(record, dict) for record in records):
+        raise ValueError("Each input record must be a JSON object")
+    return records
 
 
 def main() -> None:
     args = parse_args()
     load_dotenv()
-    run_data = run_healthcare_demo_scenario(args.scenario)
+    if bool(args.scenario) == bool(args.input):
+        raise SystemExit("Choose exactly one of --scenario or --input")
+    run_data_list = (
+        [run_healthcare_demo_scenario(args.scenario)]
+        if args.scenario
+        else [run_alert_payload(record) for record in _load_input(args.input)]
+    )
+    for run_data in run_data_list:
+        _print_run(run_data)
+
+
+def _print_run(run_data: dict[str, object]) -> None:
     scenario = run_data["scenario"]
     label = run_data["label"]
     confidence = run_data["confidence"]
     result = run_data["result"]
 
     print("\n=== TRIAGE RESULT ===")
-    print(f"Scenario: {args.scenario} - {scenario['title']}")
+    print(f"Scenario: {run_data['scenario_key']} - {scenario['title']}")
     print(f"Label: {label}")
     print(f"QML backend: {run_data.get('qml_backend', 'unknown')}")
+    trace = run_data.get("workflow_trace", [])
+    if isinstance(trace, list):
+        nodes = [str(item.get("node")) for item in trace if isinstance(item, dict)]
+        print(f"LangGraph nodes executed: {', '.join(nodes)}")
     print(f"Confidence: {confidence:.2f}")
 
-    print("\nSimulated Logs:")
+    print("\nInput Logs:")
     for log in run_data.get("logs", []):
         print(f"- {log}")
 

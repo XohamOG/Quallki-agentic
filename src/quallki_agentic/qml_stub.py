@@ -20,7 +20,9 @@ def infer_with_metadata(payload: dict[str, Any]) -> dict[str, str]:
     if _classifier is None:
         settings = Settings.from_env()
         _classifier = QMLVQCClassifier(
-            settings.qml_model_path, settings.qml_autoencoder_path
+            settings.qml_model_path,
+            settings.qml_autoencoder_path,
+            settings.qml_preprocessing_path,
         )
     if _classifier.available:
         return {

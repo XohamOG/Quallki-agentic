@@ -216,3 +216,37 @@ Converted raw numeric port numbers into one-hot binary indicator columns:
 | **`8`** | **`SlowLoris` (Capped)** | **19,033** | **12.8%** |
 | **`9`** | `SuperSpy` | **6,944** | 4.7% |
 | **Total** | **10 Cleaned Scenarios** | **149,196** | **100%** |
+
+---
+
+## Phase 9: Quantum Machine Learning (QML) Feature Pipeline
+
+For Quantum Variational Circuits (VQCs) to process the high-dimensional tabular data, a secondary QML-specific preprocessing pipeline is applied to `MasterDatasetProcessed_Clean.csv`:
+
+### 1. Log-Transformation of Heavy-Tailed Features
+* Applied `np.log1p` to 19 heavily skewed network traffic features (such as `flow_duration`, `flow_byts_s`, `flow_pkts_s`, `totlen_fwd_pkts`, `flow_iat_mean`).
+
+### 2. Standardization
+* Applied `StandardScaler` to transform all 99 continuous features to zero mean ($\mu = 0$) and unit variance ($\sigma^2 = 1$).
+
+### 3. Non-Linear PyTorch Autoencoder Dimensionality Reduction ($99 \rightarrow 6$)
+* Constructed a PyTorch Neural Autoencoder (`99 -> 64 -> n_qubits -> 64 -> 99`) to non-linearly compress the 99 tabular features down to 4 or 6 dense latent features.
+* Pre-trained the Autoencoder for 15 epochs using `Adam` optimizer ($lr = 0.005$) and `MSELoss()` on the training set.
+
+### 4. Training-Set-Only Min-Max Pi Scaling (`scale_to_pi`)
+* To prevent data leakage into quantum rotation angles, `x_min` and `x_max` bounds are derived **strictly from the training latent representations** (`fit_data`):
+  $$\text{scale\_to\_pi}(x) = 2\pi \cdot \frac{x - x_{\text{min}}}{x_{\text{max}} - x_{\text{min}}} - \pi$$
+* Strictly maps all latent variables into the periodic quantum angle range $[-\pi, \pi]$ for PennyLane's `AngleEmbedding`.
+
+---
+
+## Phase 10: Model Training Execution Summary
+
+| Pipeline Component | Classical Champion (LightGBM) | QML Champion (6-Qubit VQC) |
+| :--- | :--- | :--- |
+| **Input Dimensionality** | 99 Features (Standardized) | 6 Latent Features (Autoencoder + Pi-Scaled) |
+| **Feature Reduction** | None (Uses all 99 tabular features) | PyTorch Autoencoder ($99 \rightarrow 6$, 15 epochs) |
+| **Scaling Domain** | Standardized ($\mu=0, \sigma=1$) | Periodic Angle Domain ($[-\pi, \pi]$) |
+| **Model Engine** | Regularized LightGBM (Optuna Tuned) | PennyLane `StronglyEntanglingLayers` VQC + PyTorch |
+| **Target Task** | 10-Class Threat Classification | 10-Class Threat Classification |
+

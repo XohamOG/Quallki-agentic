@@ -1,0 +1,44 @@
+{
+  "alert_id": "SIM-PACS-2026-0002",
+  "message": "Repeated network reconnaissance against PACS and DICOM services from an external source.",
+  "event_time": "2026-08-20T11:14:09Z",
+  "source_ip": "198.51.100.77",
+  "asset_type": "pacs",
+  "clinical_impact": "medium",
+  "contains_phi": true,
+  "logs": [
+    "2026-08-20T11:14:02Z sensor=netflow src=198.51.100.77 dst=10.20.9.40 dst_port=104 tcp_flags=S packets=1 action=allowed",
+    "2026-08-20T11:14:05Z sensor=IDS signature=TCP_SYN_SCAN src=198.51.100.77 target_group=DICOM endpoints count=38",
+    "2026-08-20T11:14:07Z host=PACS-01 source=Wazuh rule=5710 severity=8 description=Repeated connection attempts",
+    "2026-08-20T11:14:09Z sensor=network_monitor event=DICOM_C_ECHO_ENUMERATION source=198.51.100.77 assets=12"
+  ],
+  "features": {
+    "flow_duration": 0.12,
+    "flow_byts_s": 1200.0,
+    "flow_pkts_s": 18.0,
+    "tot_fwd_pkts": 38.0,
+    "tot_bwd_pkts": 4.0,
+    "syn_flag_cnt": 38.0,
+    "rst_flag_cnt": 34.0,
+    "os_event_volume": 2.0,
+    "os_severity_max": 8.0,
+    "os_severity_sum": 16.0,
+    "os_sysmon_proc_cnt": 0.0,
+    "os_high_severity_cnt": 1.0,
+    "dst_port_other": 1.0,
+    "src_port_ephemeral": 1.0,
+    "proto_tcp": 1.0
+  },
+  "telemetry_signals": {
+    "signal_strength": 0.82,
+    "ids_alert_count": 2,
+    "unique_targets": 12
+  },
+  "compliance_context": {
+    "hipaa_applicable": true,
+    "gdpr_applicable": false,
+    "iso_scope": true,
+    "soc2_scope": false,
+    "nis2_applicable": false
+  }
+}

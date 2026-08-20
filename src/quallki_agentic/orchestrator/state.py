@@ -10,6 +10,9 @@ class OrchestratorState(TypedDict, total=False):
     asset_type: str
     contains_phi: bool
     clinical_impact: str
+    logs: list[str]
+    telemetry_signals: dict
+    simulation: dict
     compliance_context: dict
     compliance_evidence: dict
     alert_id: str

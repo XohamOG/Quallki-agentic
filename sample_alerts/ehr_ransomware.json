@@ -1,0 +1,45 @@
+{
+  "alert_id": "SIM-EHR-2026-0001",
+  "message": "Suspected ransomware activity on EHR application server with PowerShell execution and shadow copy deletion.",
+  "event_time": "2026-08-20T10:00:09Z",
+  "source_ip": "203.0.113.45",
+  "asset_type": "ehr_server",
+  "clinical_impact": "high",
+  "contains_phi": true,
+  "logs": [
+    "2026-08-20T10:00:01Z host=EHR-SRV-01 source=Sysmon event_id=1 image=powershell.exe parent=winword.exe user=svc_backup",
+    "2026-08-20T10:00:04Z host=EHR-SRV-01 source=Sysmon event_id=1 command=ShadowCopyDeletion.exe -all user=svc_backup",
+    "2026-08-20T10:00:06Z host=EHR-SRV-01 source=Wazuh rule=61618 severity=12 description=Suspicious process execution",
+    "2026-08-20T10:00:09Z host=EHR-SRV-01 source=EDR file_activity=mass_encryption extensions=.locked files_seen=1842",
+    "2026-08-20T10:00:12Z host=EHR-SRV-01 source=SMB lateral_movement destination=10.20.4.20 status=blocked"
+  ],
+  "features": {
+    "flow_duration": 12.4,
+    "flow_byts_s": 184000.0,
+    "flow_pkts_s": 420.0,
+    "tot_fwd_pkts": 64.0,
+    "tot_bwd_pkts": 48.0,
+    "os_event_volume": 5.0,
+    "os_severity_max": 12.0,
+    "os_severity_sum": 36.0,
+    "os_sysmon_proc_cnt": 3.0,
+    "os_pam_sudo_cnt": 0.0,
+    "os_high_severity_cnt": 2.0,
+    "dst_port_445": 1.0,
+    "dst_port_other": 0.0,
+    "src_port_ephemeral": 1.0,
+    "proto_tcp": 1.0
+  },
+  "telemetry_signals": {
+    "signal_strength": 0.95,
+    "edr_confidence": 0.91,
+    "siem_rule_count": 4
+  },
+  "compliance_context": {
+    "hipaa_applicable": true,
+    "gdpr_applicable": false,
+    "iso_scope": true,
+    "soc2_scope": false,
+    "nis2_applicable": false
+  }
+}

@@ -9,6 +9,16 @@ The repository is currently a deterministic, local demonstration. It does not
 send packets, execute attacks, contact hospital systems, or make containment
 changes to real infrastructure.
 
+The application executes the compiled LangGraph with streamed node updates.
+The simulator creates the input event, and the UI/CLI displays the actual state
+returned by Detection, Triage, Threat Intel, Response, Forensics, Compliance,
+and Finalize nodes for that run.
+
+## LangSmith Tracing
+
+By default, LangSmith network tracing is disabled. To enable it, set
+`ENABLE_LANGSMITH=true` and provide a valid `LANGCHAIN_API_KEY`.
+
 ## What Is Implemented
 
 The main workflow is built with LangGraph:
@@ -131,6 +141,72 @@ The CLI prints:
 - Containment actions
 - Healthcare compliance checklist
 - Final SOC summary
+
+## Run Real Alert Data
+
+The CLI can process a normalized JSON object or JSONL file without using the
+synthetic scenario catalog:
+
+```powershell
+$env:PYTHONPATH = "src"
+.\.venv\Scripts\python.exe -m quallki_agentic.cli --input .\alerts.jsonl
+```
+
+Each JSON record may contain `message`, `logs`, `source_ip`, `event_time`,
+`asset_type`, `clinical_impact`, `contains_phi`, `features` or
+`feature_vector`, `telemetry_signals`, `compliance_context`, and
+`compliance_evidence`. The record is passed directly into the compiled
+LangGraph. No demo scenario or simulated log is added.
+
+Example real-alert shape:
+
+```json
+{
+	"alert_id": "INC-2026-0001",
+	"message": "Suspicious PowerShell execution on EHR server",
+	"logs": ["2026-08-20T12:00:00Z host=EHR-01 event=powershell"],
+	"source_ip": "203.0.113.10",
+	"event_time": "2026-08-20T12:00:00Z",
+	"asset_type": "ehr_server",
+	"clinical_impact": "high",
+	"contains_phi": true,
+	"features": {
+		"os_event_volume": 1,
+		"os_sysmon_proc_cnt": 1,
+		"proto_tcp": 1
+	}
+}
+```
+
+The Streamlit dashboard starts in **Live JSON/JSONL** mode. Upload a record and
+click **Run Agentic SOC**. **Synthetic demo** mode is separate and uses only
+the built-in healthcare scenarios.
+
+Ready-to-run sanitized fixtures are available under `sample_alerts/`:
+
+- `ehr_ransomware.json`
+- `pacs_recon.json`
+- `infusion_pump_credential_abuse.json`
+- `alerts.jsonl` containing all three alerts
+
+Run one fixture from PowerShell:
+
+```powershell
+$env:PYTHONPATH = "src"
+\.venv\Scripts\python.exe -m quallki_agentic.cli --input sample_alerts\ehr_ransomware.json
+```
+
+Run the batch fixture:
+
+```powershell
+\.venv\Scripts\python.exe -m quallki_agentic.cli --input sample_alerts\alerts.jsonl
+```
+
+These files are sanitized test data using documentation IP ranges and
+realistic Wazuh, Sysmon, EDR, IAM, IDS, and NetFlow-style fields. They are not
+captured production logs. Until the training-only `qml_preprocessing.json`
+artifact is generated, raw 99-feature uploads use the explicitly reported
+`heuristic_stub` backend; the rest of the LangGraph still executes normally.
 
 ## Run The Streamlit Dashboard
 
@@ -373,15 +449,27 @@ include:
 | `KNOWLEDGE_DIR` | Local playbook directory | `knowledge` |
 | `QML_MODEL_PATH` | Supplied QML checkpoint path | `best_qml_vqc_6q.pt` |
 | `QML_AUTOENCODER_PATH` | 99-to-6 autoencoder checkpoint path | `best_qml_autoencoder_6q.pt` |
+| `QML_PREPROCESSING_PATH` | Training-only scaler and latent pi-scaling artifact | `qml_preprocessing.json` |
 | `LOCAL_CLASSIFIER_MODEL_PATH` | Legacy classifier asset location | `models/classifier` |
 | `USE_OPENAI` | Enable optional response drafting | `false` |
 | `OPENAI_MODEL` | OpenAI response model | `gpt-4o-mini` |
-| `LLM_PROVIDER` | Optional provider setting | `gemini` |
+| `LLM_PROVIDER` | Reserved optional provider setting | `none` |
 | `GEMINI_MODEL` | Optional Gemini model setting | `gemini-2.5-pro` |
 
-The current orchestrator detection and triage path is deterministic and does
-not require Gemini or OpenAI credentials. Optional provider integrations should
-be treated as future extensions until explicitly wired into the desired flow.
+The active Detection Agent uses the local QML checkpoints. Triage, Threat Intel,
+Response, Forensics, and Compliance use deterministic Python rules and evidence
+processing. Gemini is an optional reasoning specialist for triage only. Enable
+it locally without committing the secret:
+
+```powershell
+$env:GEMINI_API_KEY = "<set-this-locally>"
+$env:USE_GEMINI = "true"
+```
+
+The deterministic priority and clinical-safety rules remain authoritative. The
+Gemini output is validated JSON used only to enrich reasoning and recommended
+fixes. Do not send PHI or production-sensitive data to a third-party model
+without an approved privacy, contractual, and security review.
 
 ## Development Checks
 
@@ -419,10 +507,11 @@ Before connecting real telemetry or automated response integrations, add:
 
 ## Current Limitations And Next Steps
 
-- The supplied autoencoder performs the 99-to-6 reduction. Its original
-	training-time feature scaling metadata was not included, so reproduce that
-	scaler for production accuracy. A caller can still provide a preprocessed
-	six-value `qml_input` directly.
+- The supplied autoencoder performs the 99-to-6 reduction. Raw 99-feature
+	inference requires `qml_preprocessing.json`, containing the exact 19 log
+	features, 99 training means/scales, and six training latent min/max bounds.
+	Generate it from a training-only CSV with `scripts/fit_qml_preprocessing.py`.
+	A caller can provide a preprocessed six-value `qml_input` for diagnostics.
 - Log analysis uses deterministic heuristics, not a production parser or SIEM
 	query engine.
 - CWSS-like scoring is an explainable demo heuristic, not an official CWSS
