@@ -1,0 +1,21 @@
+[
+  {
+    "logs": [
+      "2026-08-21T01:00:00Z sensor=WAF rule=SlowHTTP_Connection src_ip=198.51.100.55 connections=480 state=HALF_OPEN",
+      "2026-08-21T01:00:03Z host=WEB-PORTAL-01 source=Wazuh rule=31151 severity=10 description='Possible SlowLoris DoS: max worker threads exhausted'",
+      "2026-08-21T01:00:08Z host=WEB-PORTAL-01 source=nginx error='upstream timed out (110: Connection timed out)' client=198.51.100.55"
+    ]
+  },
+  {
+    "logs": [
+      "2026-08-20T12:00:00Z host=EHR-01 event=powershell shadow copy deletion user=admin",
+      "2026-08-20T12:00:05Z host=EHR-01 event=ransomware encrypting patient records file=patient_db.enc"
+    ]
+  },
+  {
+    "logs": [
+      "2026-08-21T00:10:00Z sensor=netflow tcp_flags=S pkts=100 src_ip=192.168.1.105",
+      "2026-08-21T00:10:02Z sensor=IDS signature=NMAP_SYN_SCAN endpoints=1"
+    ]
+  }
+]

@@ -7,22 +7,37 @@ from quallki_agentic.config import Settings
 def invoke_gemini(prompt: str) -> dict[str, object] | None:
     settings = Settings.from_env()
     
-    if not settings.use_gemini or not os.getenv("GEMINI_API_KEY"):
-        # For testing logs-only without GEMINI_API_KEY, we might want to return None
-        # but the prompt assumes we use GEMINI. If it's disabled, we'll return None.
-        # But wait, the user wants us to "ensure the respective agents can use my models".
-        # We will assume GEMINI_API_KEY is provided or USE_GEMINI is true.
+    # Try NVIDIA first
+    llm = None
+    if os.getenv("NVIDIA_API_KEY"):
+        try:
+            from langchain_nvidia_ai_endpoints import ChatNVIDIA
+            llm = ChatNVIDIA(
+                model="nvidia/nemotron-3-ultra-550b-a55b",
+                nvidia_api_key=os.environ["NVIDIA_API_KEY"],
+                temperature=0.0
+            )
+        except Exception as e:
+            print(f"Failed to load NVIDIA LLM: {e}")
+            llm = None
+
+    # Fallback to Gemini
+    if not llm and settings.use_gemini and os.getenv("GEMINI_API_KEY"):
+        try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            llm = ChatGoogleGenerativeAI(
+                model=settings.gemini_model,
+                google_api_key=os.environ["GEMINI_API_KEY"],
+                temperature=0.0,
+            )
+        except Exception as e:
+            print(f"Failed to load Gemini LLM: {e}")
+            llm = None
+            
+    if not llm:
         return None
         
     try:
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        
-        llm = ChatGoogleGenerativeAI(
-            model=settings.gemini_model,
-            google_api_key=os.environ["GEMINI_API_KEY"],
-            temperature=0,
-        )
-        
         raw = str(llm.invoke(prompt).content).strip()
         start, end = raw.find("{"), raw.rfind("}")
         if start == -1 or end == -1:

@@ -1,58 +1,18 @@
 from __future__ import annotations
 
-import json
 import os
-
+import uuid
 from quallki_agentic.agents.base_agent import BaseAgent
 from quallki_agentic.config import Settings
+from quallki_agentic.telemetry.schemas import TriageVerdict
 
 
 class TriageAgent(BaseAgent):
     name = "triage"
 
-    def __init__(self) -> None:
-        self._settings = Settings.from_env()
-
-    def _gemini_reasoning(
-        self,
-        label: str,
-        confidence: float,
-        cwss_score: float,
-        attack_vector: str,
-        clinical_impact: str,
-        evidence: list[str],
-        affected_assets: list[object],
-    ) -> dict[str, object] | None:
-        from quallki_agentic.llm_helper import invoke_gemini
-
-        prompt = (
-            "You are a healthcare SOC reasoning specialist. Return strict JSON only with "
-            "keys reasoning and recommended_fixes. Do not change priority, route, or confidence. "
-            "Do not claim compliance or certainty. Keep reasoning under 45 words and provide "
-            "at most 4 concise fixes. Never recommend disruptive clinical action without human approval.\n\n"
-            f"QML label: {label}\n"
-            f"Composite confidence: {confidence:.4f}\n"
-            f"CWSS-like score: {cwss_score:.2f}\n"
-            f"Attack vector: {attack_vector}\n"
-            f"Clinical impact: {clinical_impact}\n"
-            f"Evidence: {evidence}\n"
-            f"Affected assets: {affected_assets}\n"
-        )
-        
-        parsed = invoke_gemini(prompt)
-        if not parsed:
-            return None
-            
-        fixes = parsed.get("recommended_fixes", [])
-        if not isinstance(fixes, list):
-            fixes = []
-        return {
-            "reasoning": str(parsed.get("reasoning", "Gemini reasoning completed.")),
-            "recommended_fixes": [str(item) for item in fixes[:4]],
-            "backend": "gemini",
-        }
-
     def run(self, payload: dict[str, object]) -> dict[str, object]:
+        settings = Settings.from_env()
+
         alert = payload.get("alert_object", {})
         if not isinstance(alert, dict):
             alert = {}
@@ -68,48 +28,103 @@ class TriageAgent(BaseAgent):
         if not isinstance(affected_assets, list):
             affected_assets = [affected_assets]
 
-        if (clinical_impact == "critical" and confidence >= 0.8) or cwss_score >= 9:
-            priority, route = "P0", "response_path"
-        elif confidence >= 0.65 or cwss_score >= 6:
-            priority, route = "P1", "response_path"
-        else:
-            priority, route = "P2", "investigate_path"
-        auto_close = False
-        reasoning = (
-            f"{priority} assigned from composite confidence {confidence:.2f}, "
-            f"CWSS-like score {cwss_score:.2f}, {attack_vector} vector, and {clinical_impact} clinical impact."
-        )
-        fixes = {
-            "endpoint": ["Isolate affected endpoint", "Preserve encrypted-file and process telemetry"],
-            "web application": ["Block malicious request source", "Review and parameterize affected queries"],
-            "identity": ["Lock or reset affected credentials", "Review authentication logs and MFA posture"],
-        }.get(attack_vector, ["Validate the alert and preserve relevant logs", "Apply targeted containment after confirmation"])
-        gemini = self._gemini_reasoning(
-            label,
-            confidence,
-            cwss_score,
-            attack_vector,
-            clinical_impact,
-            analysis.get("evidence", []) if isinstance(analysis, dict) else [],
-            [str(asset) for asset in affected_assets],
-        )
-        reasoning_backend = "deterministic"
-        if gemini:
-            reasoning = f"{reasoning} Gemini analyst note: {gemini['reasoning']}"
-            if gemini["recommended_fixes"]:
-                fixes = gemini["recommended_fixes"]
-            reasoning_backend = "deterministic+gemini"
+        prompt = f"""
+        You are the Tier-2 Triage Agent in QUAL-KĪ SOC.
+        Analyze the following security telemetry and determine the TriageVerdict:
+        - QML Label: {label}
+        - Composite Confidence: {confidence:.2f}
+        - CWSS Score: {cwss_score:.2f}
+        - Attack Vector: {attack_vector}
+        - Clinical Impact: {clinical_impact}
+        - Evidence: {analysis.get('evidence', [])}
+        - Affected Assets: {affected_assets}
+        - Message: {payload.get('message', '')}
+        - Logs: {payload.get('logs', [])}
+        
+        Generate the incident ID (e.g., INC-YYYY-XXX), formulate a threat hypothesis, determine if it's a false positive, and specify exactly which specialist agents to route to.
+        """
 
+        verdict: TriageVerdict | None = None
+        
+        # Try NVIDIA first
+        llm = None
+        if os.getenv("NVIDIA_API_KEY"):
+            try:
+                from langchain_nvidia_ai_endpoints import ChatNVIDIA
+                llm = ChatNVIDIA(
+                    model="nvidia/nemotron-3-ultra-550b-a55b",
+                    nvidia_api_key=os.environ["NVIDIA_API_KEY"],
+                    temperature=0.0
+                )
+            except Exception as e:
+                print(f"Failed to load NVIDIA LLM in Triage: {e}")
+                llm = None
+
+        # Fallback to Gemini
+        if not llm and settings.use_gemini and os.getenv("GEMINI_API_KEY"):
+            try:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                llm = ChatGoogleGenerativeAI(
+                    model=settings.gemini_model,
+                    google_api_key=os.environ["GEMINI_API_KEY"],
+                    temperature=0.0,
+                )
+            except Exception as e:
+                print(f"Failed to load Gemini LLM in Triage: {e}")
+                llm = None
+
+        if llm:
+            try:
+                structured_llm = llm.with_structured_output(TriageVerdict)
+                verdict = structured_llm.invoke(prompt)
+            except Exception as e:
+                print(f"Triage LLM extraction error: {e}")
+
+        if verdict:
+            # Route logic based on verdict action
+            route = "investigate_path"
+            if verdict.action in ["ESCALATE_HIGH", "CONTAIN_CRITICAL"]:
+                route = "response_path"
+            elif verdict.action == "AUTO_CLOSE_FALSE_POSITIVE":
+                route = "auto_close"
+                
+            return {
+                "triage_result": {
+                    "incident_id": verdict.incident_id,
+                    "priority": verdict.assigned_priority,
+                    "confidence": confidence,
+                    "action": verdict.action,
+                    "threat_hypothesis": verdict.threat_hypothesis,
+                    "blast_radius": verdict.blast_radius,
+                    "affected_critical_assets": verdict.affected_critical_assets,
+                    "auto_close_rationale": verdict.auto_close_rationale,
+                    "required_specialists": verdict.required_specialists,
+                    "recommended_containment": verdict.recommended_containment,
+                    "requires_human_signoff": verdict.requires_human_signoff,
+                    "human_executive_brief": verdict.human_executive_brief,
+                    "reasoning_backend": "gemini_structured"
+                },
+                "route": route,
+            }
+
+        # Fallback deterministic
+        priority = "P1" if cwss_score >= 6 else "P2"
+        route = "response_path" if priority == "P1" else "investigate_path"
         return {
             "triage_result": {
+                "incident_id": f"INC-{uuid.uuid4().hex[:6]}",
                 "priority": priority,
                 "confidence": confidence,
-                "reasoning": reasoning,
-                "auto_close": auto_close,
-                "affected_assets": [str(asset) for asset in affected_assets],
-                "impact": clinical_impact,
-                "recommended_fixes": fixes,
-                "reasoning_backend": reasoning_backend,
+                "action": "CONTAIN_CRITICAL" if priority == "P1" else "INVESTIGATE_LOW",
+                "threat_hypothesis": f"Fallback hypothesis for {attack_vector}",
+                "blast_radius": "Isolated_Host",
+                "affected_critical_assets": [str(a) for a in affected_assets],
+                "auto_close_rationale": None,
+                "required_specialists": ["ThreatIntelAgent", "ResponseAgent"],
+                "recommended_containment": "Isolate affected host",
+                "requires_human_signoff": True,
+                "human_executive_brief": f"Fallback alert for {label} - {cwss_score}",
+                "reasoning_backend": "deterministic_fallback"
             },
             "route": route,
         }

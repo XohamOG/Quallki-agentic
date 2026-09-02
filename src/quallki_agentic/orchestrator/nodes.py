@@ -92,6 +92,8 @@ def compliance_node(state: OrchestratorState) -> OrchestratorState:
     _publish("agent.compliance.completed", result)
     return result
 
+    return result
+
 
 def finalize_node(state: OrchestratorState) -> OrchestratorState:
     triage = state.get("triage_result", {})
@@ -114,8 +116,9 @@ def finalize_node(state: OrchestratorState) -> OrchestratorState:
 
     action_text = "; ".join(actions) if isinstance(actions, list) and actions else "No containment action executed."
     summary = (
-        f"Priority: {priority}. "
-        f"Reasoning: {reasoning}. "
+        f"Incident: {state.get('triage_result', {}).get('incident_id', 'N/A')}. "
+        f"Action: {state.get('triage_result', {}).get('action', 'N/A')}. "
+        f"Hypothesis: {state.get('triage_result', {}).get('threat_hypothesis', 'N/A')}. "
         f"ATT&CK: {', '.join(techniques) if techniques else 'none'}. "
         f"Actions: {action_text} "
         f"Forensics: {forensics if forensics else 'pending'}. "

@@ -31,3 +31,5 @@ class OrchestratorState(TypedDict, total=False):
     compliance_checklist: list[dict]
     compliance_assessment: dict
     final_summary: str
+    deception_plan: list[str]
+    vulnerability_report: dict
