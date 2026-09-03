@@ -85,7 +85,12 @@ def _print_run(run_data: dict[str, object]) -> None:
     triage = result.get("triage_result", {})
     if isinstance(triage, dict):
         print(f"Priority: {triage.get('priority', 'P4')}")
-        print(f"Triage Reasoning: {triage.get('reasoning', 'n/a')}")
+        hypothesis = triage.get("threat_hypothesis")
+        rationale = triage.get("auto_close_rationale")
+        if hypothesis:
+            print(f"Threat Hypothesis: {hypothesis}")
+        if rationale:
+            print(f"Auto-Close Rationale: {rationale}")
 
     actions = result.get("recommended_actions", [])
     if actions:

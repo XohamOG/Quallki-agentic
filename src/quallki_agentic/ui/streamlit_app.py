@@ -72,7 +72,6 @@ st.caption(f"Inference backend: {run_data.get('qml_backend', 'unknown')}")
 (
     tab_overview,
     tab_detection,
-    tab_comparison,
     tab_triage,
     tab_threat_intel,
     tab_response,
@@ -84,7 +83,6 @@ st.caption(f"Inference backend: {run_data.get('qml_backend', 'unknown')}")
     [
         "Overview",
         "Detection",
-        "Model Comparison",
         "Triage",
         "Threat Intel",
         "Response",
@@ -128,58 +126,7 @@ with tab_detection:
     st.caption("Local autoencoder + VQC inference, log analysis, IOC extraction, and severity scoring.")
     st.json(alert if isinstance(alert, dict) else {})
 
-with tab_comparison:
-    st.subheader("Quantum vs Classical Model Comparison")
-    st.caption("Live inference comparison between the 6-qubit QML VQC and the LightGBM Classical Model.")
 
-    qml_label = alert.get("qml_label", "unknown") if isinstance(alert, dict) else "unknown"
-    classical_label = alert.get("classical_label", "unknown") if isinstance(alert, dict) else "unknown"
-    backend = alert.get("qml_backend", "unknown") if isinstance(alert, dict) else "unknown"
-    agree = (qml_label == classical_label and qml_label != "unknown")
-
-    # Agreement / disagreement banner
-    if agree:
-        st.success(f"✅ **Both models agree:** `{qml_label}`")
-    elif classical_label == "unknown":
-        st.warning("⚠️ Classical model prediction unavailable.")
-    else:
-        st.warning(
-            f"⚠️ **Model Disagreement** — QML predicts `{qml_label}` · Classical predicts `{classical_label}`\n\n"
-            "This is expected with the current 6-qubit VQC: the quantum circuit has limited expressivity "
-            "and can collapse toward a dominant class across most feature distributions. "
-            "The **Classical LightGBM** prediction is more reliable for production triage. "
-            "Retraining the QML with more qubits or better class-balancing would resolve this."
-        )
-
-    col_qml, col_classical = st.columns(2)
-    with col_qml:
-        st.markdown("#### 🔬 Quantum VQC Model")
-        st.metric("Prediction", str(qml_label))
-        st.caption(f"Backend: `{backend}`")
-        st.markdown(
-            "**Architecture:** 99-feature → Autoencoder (99→64→6) → 6-qubit VQC → 10-class linear head  \n"
-            "**Limitation:** 6-qubit circuits have limited expressivity; may over-predict dominant class. "
-            "Treat as a research-grade signal, not a production classifier."
-        )
-
-    with col_classical:
-        st.markdown("#### 🤖 Classical LightGBM Model")
-        st.metric("Prediction", str(classical_label))
-        st.caption("Backend: `best_regularized_model.joblib`")
-        st.markdown(
-            "**Architecture:** Trained LightGBM gradient boosting on the full 99-feature schema  \n"
-            "**Reliability:** Higher accuracy across all attack classes. "
-            "Recommended as the primary label for triage and response decisions."
-        )
-
-    # Trust recommendation
-    st.divider()
-    st.markdown("#### 📊 Which model to trust for triage?")
-    trust_col1, trust_col2 = st.columns(2)
-    with trust_col1:
-        st.markdown("**QML VQC** — Use for research, benchmarking, and quantum AI demonstration only.")
-    with trust_col2:
-        st.markdown("**Classical LightGBM** — Use for production alert classification, priority, and response.")
 
 with tab_workflow:
     st.subheader("LangGraph Execution Trace")
@@ -196,16 +143,18 @@ with tab_workflow:
         st.info("No streamed graph updates available.")
 
 with tab_triage:
-    st.subheader("Triage Reasoning")
+    st.subheader("Triage Analysis & Verdict")
     if isinstance(triage, dict):
         st.write(
             {
+                "incident_id": triage.get("incident_id"),
                 "priority": triage.get("priority"),
-                "confidence": triage.get("confidence"),
-                "reasoning": triage.get("reasoning"),
-                "reasoning_backend": triage.get("reasoning_backend", "deterministic"),
-                "recommended_fixes": triage.get("recommended_fixes", []),
-                "auto_close": triage.get("auto_close"),
+                "action": triage.get("action"),
+                "threat_hypothesis": triage.get("threat_hypothesis"),
+                "blast_radius": triage.get("blast_radius"),
+                "auto_close_rationale": triage.get("auto_close_rationale"),
+                "human_executive_brief": triage.get("human_executive_brief"),
+                "reasoning_backend": triage.get("reasoning_backend", "gemini_structured"),
             }
         )
     else:

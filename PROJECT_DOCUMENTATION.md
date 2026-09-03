@@ -23,15 +23,16 @@
 
 ## 1. Project Overview
 
-**QUAL-KI** (Quantum-AI Security Operations Intelligence) is a healthcare-focused **Agentic SOC** prototype that demonstrates:
+**QUAL-KI** (Quantum-AI Security Operations Intelligence) is a healthcare-focused **Agentic SOC** prototype that demonstrates the future of Tier-1/Tier-2 autonomous SOC operations. It leverages:
 
-- Real-time **security alert processing** using a multi-agent AI pipeline
-- **Quantum Machine Learning (QML)** — a 6-qubit Variational Quantum Circuit (VQC) for attack classification
-- **Classical ML** — a trained LightGBM model running in parallel for benchmarking
-- **LLM reasoning** via Google Gemini-3.5-Flash for triage, forensics, compliance, and response
-- A **compliance evidence mapping** system across HIPAA, NIST, ISO 27001, GDPR, and more
+- A streamlined **7-Agent LangGraph Framework** capable of automating routine alert triage (the 70% threshold) using cognitive reasoning.
+- **Dual-LLM Orchestration** — NVIDIA Nemotron-3-Ultra-550b prioritized for primary inference, with a seamless, zero-downtime fallback to Google Gemini-3.5-Flash.
+- **Structured Pydantic Outputs** (`.with_structured_output()`) to guarantee deterministic routing and data extraction (e.g., `TriageVerdict`) without parsing ambiguity.
+- **Quantum Machine Learning (QML)** — a 6-qubit Variational Quantum Circuit (VQC) running alongside a classical LightGBM model for threat detection.
+- A **deterministic CWSS v1.0.1 scoring engine** embedded directly into the Threat Intel Agent to bridge MITRE ATT&CK techniques with CAPEC and CWE vulnerabilities.
+- A **compliance evidence mapping** system assessing posture across HIPAA, NIST, ISO 27001, GDPR, and more.
 
-The system accepts real SIEM-style JSON logs and routes them through a **LangGraph** multi-agent pipeline — producing triage priorities, ATT&CK technique mapping, containment recommendations, and a regulatory compliance posture report.
+The system accepts real SIEM-style JSON logs and routes them through the LangGraph pipeline, producing actionable containment recommendations, blast-radius hypotheses, and a regulatory compliance posture report—all viewable on a real-time Streamlit dashboard.
 
 > **Important:** This is a research prototype. It does not send packets, execute attacks, contact real hospital systems, or make automated changes to infrastructure.
 
@@ -195,7 +196,7 @@ bwd_pkts_b_avg, tot_fwd_pkts, subflow_fwd_pkts
 
 ## 5. Agentic Workflow
 
-The system is built on **LangGraph** — a stateful, directed graph of agent nodes.
+The system is built on **LangGraph** — a stateful, directed graph of 7 agent nodes. It utilizes an **OrchestratorState** shared memory dictionary, allowing agents to sequentially read and write context.
 
 ```
 Input Alert JSON
@@ -204,20 +205,18 @@ Input Alert JSON
  Detection Node  --> alert_object, qml_label, classical_label, cwss, iocs
        |
        v
- Triage Node     --> priority (P0/P1/P2), route, reasoning, fixes
+ Triage Node     --> TriageVerdict (Pydantic: priority, threat_hypothesis, blast_radius, auto_close_rationale)
        |
-  +----+----+
-  |         |
-response  investigate
-  |
-  v
- Threat Intel   --> ATT&CK techniques, CVE links, campaigns
+       +-------------------+ (If AUTO_CLOSE_FALSE_POSITIVE) ---> Finalize
+       | (If ESCALATE_HIGH or CONTAIN_CRITICAL)
+       v
+ Threat Intel   --> ATT&CK techniques, Deterministic CWSS Score, CWE Mapping
        |
        v
- Response Node  --> containment actions (Gemini-generated)
+ Response Node  --> containment actions (LLM-generated based on Threat Intel)
        |
        v
- Forensics Node --> incident timeline (Gemini-generated)
+ Forensics Node --> incident timeline (LLM-generated narrative)
        |
        v
  Compliance Node --> evidence posture for 12 controls
@@ -230,49 +229,30 @@ response  investigate
 
 ## 6. Agent Descriptions
 
-### Detection Agent
-1. Calls Gemini to parse `message`, `source_ip`, `asset_type` from raw logs (if not provided)
+### 6.1 Multi-LLM Fallback Engine
+All cognitive agents (Triage, Threat Intel, etc.) utilize a highly resilient `llm_helper.py` backend. The engine attempts to initialize `ChatNVIDIA(model="nvidia/nemotron-3-ultra-550b-a55b")`. If the NVIDIA API key is missing or the NIM endpoint returns a 503 Overloaded error, the system safely catches the exception and falls back to `ChatGoogleGenerativeAI(model="gemini-3.5-flash")` with zero downtime.
+
+### 6.2 Detection Agent
+1. Parses `message`, `source_ip`, `asset_type` from raw logs.
 2. Runs QML VQC -> `qml_label`
 3. Runs Classical LightGBM -> `classical_label`
-4. Log Analyzer: IOC extraction, attack vector, evidence strings, CWE candidates
-5. CWSS-like scoring: label severity + clinical impact + evidence + IOC count
-6. Composite confidence: weighted sum of IOC, evidence, CWSS, label, and telemetry signals
+4. Log Analyzer: Extracts IOCs, attack vectors.
 
-### 4.2 The Triage Agent
+### 6.3 Triage Agent
+The Triage Agent operates as an autonomous Tier-1/Tier-2 analyst. It uses `.with_structured_output(TriageVerdict)` to return a rigid Pydantic model. It performs multi-modal deduplication, assesses asset blast radius, auto-closes benign telemetry with defensible audit logs (handling the 70% automation threshold), and formulates the initial threat hypothesis that drives targeted specialist agent activation.
 
-The Triage Agent is not a superficial priority assigner. Operating as an autonomous Tier-1/Tier-2 analyst, it performs multi-modal deduplication, assesses asset blast radius, auto-closes benign telemetry with defensible audit logs (70% automation threshold), and formulates the initial threat hypothesis that drives targeted specialist agent activation.
+### 6.4 Threat Intel Agent
+- Maps IOCs and triage context to MITRE ATT&CK techniques.
+- Embeds a **Deterministic CWSS v1.0.1 scoring engine**, calculating a Base, Target, and Environmental score.
+- Establishes a local crosswalk dictionary to bridge ATT&CK behaviors with CWE software flaws.
 
-### Threat Intel Agent
-- Maps IOCs to MITRE ATT&CK techniques and campaigns
-- Executes deterministic CWSS v1.0.1 scoring engine
-- Formally correlates techniques to CWE IDs
+### 6.5 Response & Forensics Agents
+- **Response Agent:** Generates 3-5 specific, actionable containment steps based on the Threat Hypothesis.
+- **Forensics Agent:** Reconstructs a timeline narrative based on raw logs and triage priority.
 
-### Response Agent
-- Calls Gemini with alert context -> 3-5 specific, actionable containment steps
-- Fallback: generic firewall block + token revoke + isolation steps
-
-### Forensics Agent
-- Calls Gemini with raw logs + triage priority -> 2-sentence attack timeline narrative
-- Fallback: template string referencing ATT&CK phases
-
-### Compliance Agent
-- Runs `assess_compliance()` to evaluate 12 regulatory controls
-- Calls Gemini for detailed, evidence-linked compliance explanation
-- Returns checklist, metrics, and note
-
-### CWSS Scoring (scoring.py)
-
-```
-cwss_score = min(10, label_severity * 0.65 + impact_score + evidence_score + ioc_score)
-```
-
-Label severities: ransomware=9.0, malware=8.5, sql-injection=8.0, credential-theft=7.5, dos=7.0, brute_force=6.5, recon=4.0, unknown=2.0
-
-### Composite Confidence (scoring.py)
-
-```
-confidence = IOC_signal*0.25 + evidence_signal*0.25 + CWSS_signal*0.20 + label_signal*0.20 + telemetry*0.10
-```
+### 6.6 Compliance Agent
+- Runs `assess_compliance()` to evaluate 12 regulatory controls.
+- Returns checklist, metrics, and a detailed, evidence-linked compliance explanation.
 
 ---
 
@@ -406,15 +386,14 @@ $env:PYTHONPATH = "src"
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| GEMINI_API_KEY | — | Authenticates Gemini LLM |
-| GEMINI_MODEL | gemini-3.5-flash | LLM model |
-| USE_GEMINI | true | Enables LLM enrichment |
+| NVIDIA_API_KEY | — | Authenticates NVIDIA Nemotron-3-Ultra |
+| GEMINI_API_KEY | — | Authenticates Gemini LLM (Fallback) |
+| GEMINI_MODEL | gemini-3.5-flash | Fallback LLM model |
+| USE_GEMINI | true | Enables Gemini fallback |
 | QML_MODEL_PATH | best_qml_vqc_6q.pt | 6-qubit VQC checkpoint |
 | QML_AUTOENCODER_PATH | best_qml_autoencoder_6q.pt | Autoencoder checkpoint |
 | QML_PREPROCESSING_PATH | qml_preprocessing.json | Scaler + latent bounds |
 | DEMO_MODE | true | Enables synthetic scenarios |
-| ENABLE_EVENT_BUS | false | Redis event publishing |
-| MESSAGE_BUS_BACKEND | inmemory | In-memory bus |
 
 ---
 
@@ -422,29 +401,29 @@ $env:PYTHONPATH = "src"
 
 ### What Works
 
-- Real log ingestion: upload any JSON with logs + features -> full 6-agent pipeline runs
-- QML inference: 6-qubit VQC loaded via PennyLane + PyTorch, runs quantum circuit inference
-- Classical inference: LightGBM correctly classifies all 10 attack types
-- Gemini reasoning: all 5 LLM-enhanced agents call Gemini with the actual alert context
-- Compliance mapping: 12 controls assessed per upload, clickable regulatory links in UI
-- Model Comparison: both QML and Classical predictions shown side-by-side
+- **Real log ingestion:** upload any JSON with logs + features -> full 7-agent pipeline runs.
+- **QML inference:** 6-qubit VQC loaded via PennyLane + PyTorch, runs quantum circuit inference.
+- **Classical inference:** LightGBM correctly classifies all 10 attack types.
+- **Dual-LLM Engine:** Resilient failover from NVIDIA Nemotron 550b to Gemini 3.5 Flash successfully bypasses `503 Overloaded` API errors with zero downtime.
+- **Pydantic Extraction:** `.with_structured_output()` ensures deterministic parsing of LLM logic across all cognitive agents.
+- **Compliance mapping:** 12 controls assessed per upload, clickable regulatory links in UI.
 
 ### Known Limitations
 
 | Issue | Root Cause | Impact |
 |-------|-----------|--------|
 | QML always predicts ransomware | 6-qubit VQC dominant-class collapse | Disagreement on all non-Ransac logs |
-| Slow pipeline (~2 min/alert) | Sequential Gemini calls (5-6 per alert) | Rate-limiting bottleneck |
+| Threat Intel relies on LLM Knowledge | ATT&CK to CWE mapping uses a local dictionary | Emerging threats may need manual updates to the dictionary |
 | Keyword-based log analysis | Deterministic heuristics, not a SIEM | Evidence quality depends on log verbosity |
-| CWSS is a heuristic | Not an official CWSS/CVSS implementation | Useful for relative ranking only |
+| CWSS is a heuristic | Calculated via custom script, not a vulnerability scanner | Useful for relative ranking only |
 | Compliance is not legal advice | AI cannot certify compliance | Requires human validation |
 
 ### Potential Next Steps
 
-1. Retrain QML with more qubits (12-16) or better class-balancing
-2. Add real SIEM adapter (Wazuh API, Splunk, Elastic)
-3. Add automated unit and integration tests
-4. Add analyst feedback capture and incident history
+1. Retrain QML with more qubits (12-16) or better class-balancing.
+2. Add real SIEM adapter (Wazuh API, Splunk, Elastic).
+3. Connect the Threat Intel agent directly to MITRE/CVE APIs instead of offline dictionaries.
+4. Add analyst feedback capture and incident history.
 5. Add approval gates for clinical response actions
 6. Add PHI minimization and audit logging for production
 
